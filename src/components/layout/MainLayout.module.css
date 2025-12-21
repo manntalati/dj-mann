@@ -1,0 +1,41 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background-color: var(--bg-dark);
+    overflow: hidden;
+}
+
+.decksRow {
+    display: flex;
+    flex: 1;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    min-height: 0;
+    /* Important for nested flex scroll */
+}
+
+.deckContainer {
+    flex: 1;
+    border-radius: var(--radius-lg);
+    background: var(--bg-panel);
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mixerContainer {
+    width: 320px;
+    border-radius: var(--radius-lg);
+    background: var(--bg-panel-glass);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.libraryRow {
+    height: 35vh;
+    background: var(--bg-panel);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: var(--spacing-sm);
+}

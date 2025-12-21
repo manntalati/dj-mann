@@ -1,0 +1,48 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 48px;
+}
+
+.knobOuter {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #1e1e24, #121215);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: ns-resize;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.knobInner {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: relative;
+    /* Rotation handled in JS */
+}
+
+.marker {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    width: 2px;
+    height: 10px;
+    background: var(--accent-primary);
+    transform: translateX(-50%);
+    border-radius: 2px;
+    box-shadow: 0 0 5px var(--accent-primary);
+}
+
+.label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

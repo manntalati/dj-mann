@@ -1,0 +1,16 @@
+.container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: text;
+    /* I-beam or similar to suggest seeking */
+}
