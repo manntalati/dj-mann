@@ -24,23 +24,23 @@ export class TransitionSelector {
         const bpmDiff = Math.abs(sourceBpm - targetBpm);
         const score = mixOutPoint.score || 50;
 
-        // High BPM difference → Vinyl Brake or Build Cut
+        // PRIORITIZE LOOP-BASED TRANSITIONS (70% chance for loop roll)
+        if (Math.random() > 0.3) {
+            return this.ensureVariety('LOOP_ROLL');
+        }
+
+        // High BPM difference → Slam Cut (instant with FX)
         if (bpmDiff > 10) {
-            return this.ensureVariety(Math.random() > 0.5 ? 'VINYL_BRAKE' : 'BUILD_CUT');
+            return this.ensureVariety('SLAM_CUT');
         }
 
-        // High score (>75) → Slam Cut or Echo Out (clean mixes)
+        // High score → Echo Out or Build Cut
         if (score > 75) {
-            return this.ensureVariety(Math.random() > 0.5 ? 'SLAM_CUT' : 'ECHO_OUT');
+            return this.ensureVariety(Math.random() > 0.6 ? 'ECHO_OUT' : 'BUILD_CUT');
         }
 
-        // Medium score (60-75) → Loop Roll or Acapella
-        if (score > 60) {
-            return this.ensureVariety(Math.random() > 0.5 ? 'LOOP_ROLL' : 'ACAPELLA');
-        }
-
-        // Lower score or experimental → Scratch or Smart EQ
-        return this.ensureVariety(Math.random() > 0.7 ? 'SCRATCH' : 'SMART_EQ');
+        // Fallback to Loop Roll (default to the most FX-heavy option)
+        return this.ensureVariety('LOOP_ROLL');
     }
 
     /**

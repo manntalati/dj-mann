@@ -9,51 +9,50 @@ export class MixPointAnalyzer {
     private maxSamplesPerTrack = 5; // How many segments to test per track
 
     /**
-     * Analyze both tracks and discover mix points
+     * Analyze directional transition between two tracks (Source -> Target)
      * Returns updated tracks with mixPoints populated
      */
-    async analyzeTracks(trackA: Track, trackB: Track): Promise<{ trackA: Track, trackB: Track }> {
-        console.log(`Analyzing mix points between "${trackA.title}" and "${trackB.title}"...`);
+    async analyzeTracks(source: Track, target: Track): Promise<{ source: Track, target: Track }> {
+        console.log(`Analyzing directional mix: "${source.title}" (OUT) → "${target.title}" (IN)...`);
 
         // Generate candidate positions for each track
-        const positionsA = this.generateCandidatePositions(trackA.duration);
-        const positionsB = this.generateCandidatePositions(trackB.duration);
+        const positionsSource = this.generateCandidatePositions(source.duration);
+        const positionsTarget = this.generateCandidatePositions(target.duration);
 
         // Score all combinations
-        const mixPointsA: MixPoint[] = [];
-        const mixPointsB: MixPoint[] = [];
+        const mixPointsSource: MixPoint[] = [];
+        const mixPointsTarget: MixPoint[] = [];
 
-        for (const posA of positionsA) {
-            for (const posB of positionsB) {
-                const score = this.scoreTransition(trackA, trackB, posA, posB);
-                console.log(`  Mix point test: A@${posA.toFixed(1)}s → B@${posB.toFixed(1)}s = Score ${score.toFixed(0)}`);
+        for (const posSource of positionsSource) {
+            for (const posTarget of positionsTarget) {
+                const score = this.scoreTransition(source, target, posSource, posTarget);
 
-                // If score is good enough, save as a mix point (lowered threshold)
+                // If score is good enough, save as a mix point
                 if (score > 40) {
-                    mixPointsA.push({
-                        time: posA,
+                    mixPointsSource.push({
+                        time: posSource,
                         type: 'out',
                         score,
-                        pairTrackId: trackB.id
+                        pairTrackId: target.id
                     });
 
-                    mixPointsB.push({
-                        time: posB,
+                    mixPointsTarget.push({
+                        time: posTarget,
                         type: 'in',
                         score,
-                        pairTrackId: trackA.id
+                        pairTrackId: source.id
                     });
                 }
             }
         }
 
         // Sort by score and keep top candidates
-        mixPointsA.sort((a, b) => (b.score || 0) - (a.score || 0));
-        mixPointsB.sort((a, b) => (b.score || 0) - (a.score || 0));
+        mixPointsSource.sort((a, b) => (b.score || 0) - (a.score || 0));
+        mixPointsTarget.sort((a, b) => (b.score || 0) - (a.score || 0));
 
         return {
-            trackA: { ...trackA, mixPoints: mixPointsA.slice(0, 3) },
-            trackB: { ...trackB, mixPoints: mixPointsB.slice(0, 3) }
+            source: { ...source, mixPoints: mixPointsSource.slice(0, 3) },
+            target: { ...target, mixPoints: mixPointsTarget.slice(0, 3) }
         };
     }
 

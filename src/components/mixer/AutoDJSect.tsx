@@ -27,7 +27,7 @@ export const AutoDJSect: React.FC = () => {
 
     const handleManualMix = async (direction: 'A' | 'B') => {
         if (isMixing) return;
-        await audioEngine.autoDJ.startAdvancedTransition(direction);
+        await audioEngine.autoDJ.triggerManualTransition(direction);
     };
 
     // Calculate progress for the timer bar (last 30 seconds)

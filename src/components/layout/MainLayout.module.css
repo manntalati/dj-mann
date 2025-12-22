@@ -40,15 +40,7 @@
     padding: 0 var(--spacing-md) var(--spacing-md);
 }
 
-.queueContainer {
-    width: 400px;
-    background: var(--bg-panel);
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    overflow: hidden;
-}
-
-.libraryContainer {
+.managerContainer {
     flex: 1;
     background: var(--bg-panel);
     border-radius: var(--radius-lg);

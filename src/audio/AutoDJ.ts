@@ -1,4 +1,3 @@
-import * as Tone from 'tone';
 import type { Deck } from './Deck';
 import type { Mixer } from './Mixer';
 import { mixPointAnalyzer } from './mixPointAnalysis';
@@ -19,10 +18,14 @@ export class AutoDJ {
     private _activeDeckId: 'A' | 'B' = 'A';
     private _monitorInterval: number | null = null; // Changed type from any to number | null
     private _timeRemaining: number = 0;
+    private _lastMixInPosition: number = 0; // The track position (seconds) where the current mix-in occurred
 
     // New: Advanced transition system
     private transitionEngine: TransitionEngine;
     private transitionSelector: TransitionSelector;
+
+    // Debug
+    private _lastDebugInterval: number = 0;
 
     constructor(deckA: Deck, deckB: Deck, mixer: Mixer) {
         this.deckA = deckA;
@@ -50,10 +53,12 @@ export class AutoDJ {
                     this.mixer.setCrossfader(0);
                     this.deckA.play();
                     this._activeDeckId = 'A';
+                    this._lastMixInPosition = this.deckA.currentTime;
                 } else if (this.deckB.track) {
                     this.mixer.setCrossfader(1);
                     this.deckB.play();
                     this._activeDeckId = 'B';
+                    this._lastMixInPosition = this.deckB.currentTime;
                 }
             }
             this.startMonitoring();
@@ -86,14 +91,26 @@ export class AutoDJ {
         const targetDeckId = this._activeDeckId === 'A' ? 'B' : 'A';
         const targetDeck = targetDeckId === 'A' ? this.deckA : this.deckB;
 
+        // Debug logging every 5 seconds
+        const debugInterval = Math.floor(Date.now() / 5000);
+        if (this._lastDebugInterval !== debugInterval) {
+            this._lastDebugInterval = debugInterval;
+            console.log(`[Monitor Debug] Active: ${this._activeDeckId}, Playing: ${activeDeck.isPlaying}, Track: ${activeDeck.track?.title || 'none'}, Time: ${activeDeck.currentTime.toFixed(1)}s`);
+            console.log(`[Monitor Debug] Target: ${targetDeckId}, Playing: ${targetDeck.isPlaying}, Track: ${targetDeck.track?.title || 'none'}`);
+        }
+
         if (activeDeck.isPlaying && activeDeck.duration > 0) {
             const currentTime = activeDeck.currentTime;
+            const playbackDuration = currentTime - this._lastMixInPosition;
             const remaining = activeDeck.duration - currentTime;
             this._timeRemaining = Math.max(0, remaining);
 
+            // GRACE PERIOD: Enforce 15s minimum playback before searching for next mix-out
+            const isGracePeriodOver = playbackDuration >= 15;
+
             // NEW: Check if we've reached any mix-out points
             const activeTrack = activeDeck.track;
-            if (activeTrack?.mixPoints && targetDeck.track) {
+            if (isGracePeriodOver && activeTrack?.mixPoints && targetDeck.track) {
                 // Debug log every 5 seconds
                 if (Math.floor(currentTime) % 5 === 0 && currentTime % 1 < 0.5) {
                     console.log(`[Monitor] t=${currentTime.toFixed(1)}s, ${activeTrack.mixPoints.length} mix points available`);
@@ -140,182 +157,115 @@ export class AutoDJ {
                             targetBpm: targetTrack.bpm || 120
                         };
 
+                        // CRITICAL: Await transition completion
+                        console.log(`AutoDJ: Starting ${transitionType} transition...`);
                         await this.transitionEngine.executeTransition(params, activeDeck, targetDeck);
+                        console.log(`AutoDJ: Transition promise resolved`);
+
+                        // 1. Update State
                         this.isMixing = false;
                         this._activeDeckId = targetDeckId;
+                        this._lastMixInPosition = params.mixInPoint || 0;
+
+                        // 2. AUTOMATIC QUEUE LOADING
+                        try {
+                            const { useStore } = await import('../store/useStore');
+                            const nextTrack = useStore.getState().popNextFromQueue();
+
+                            if (nextTrack) {
+                                console.log(`AutoDJ: Loading next track from queue: ${nextTrack.title}`);
+                                await activeDeck.load(nextTrack);
+                                await this.analyzeMixPoints();
+                            }
+                        } catch (e) {
+                            console.warn('AutoDJ: Queue loading skipped', e);
+                        }
+
+                        console.log(`AutoDJ: State updated - activeDeck=${targetDeckId}`);
                         return;
                     }
                 }
             }
 
-            // FALLBACK: Old behavior if no mix points - trigger at 30 seconds remaining
+            // FALLBACK: Behavior if no mix points - trigger at 30 seconds remaining
             if (remaining <= this.autoPilotThreshold && remaining > 0) {
-                if (targetDeck.track) {
-                    this.startAdvancedTransition(targetDeckId);
+                if (targetDeck.track && !this.isMixing) {
+                    this.isMixing = true;
+                    console.log(`AutoDJ: Falling back to standard SLAM_CUT transition (no mix points found)`);
+
+                    const params: TransitionParams = {
+                        duration: 4, // Shorter for fallback
+                        type: 'SLAM_CUT',
+                        mixOutPoint: (activeTrack?.duration || 0) - 4,
+                        mixInPoint: 0,
+                        sourceBpm: activeTrack?.bpm || 120,
+                        targetBpm: targetDeck.track.bpm || 120
+                    };
+
+                    (async () => {
+                        await this.transitionEngine.executeTransition(params, activeDeck, targetDeck);
+                        this.isMixing = false;
+                        this._activeDeckId = targetDeckId;
+                        this._lastMixInPosition = params.mixInPoint || 0;
+
+                        // Queue loading in fallback path too
+                        try {
+                            const { useStore } = await import('../store/useStore');
+                            const nextTrack = useStore.getState().popNextFromQueue();
+                            if (nextTrack) {
+                                await activeDeck.load(nextTrack);
+                                await this.analyzeMixPoints();
+                            }
+                        } catch (e) { }
+                    })();
                 }
             }
         }
     }
 
+
+
+
     /**
-     * Start a transition using discovered mix points
-     * Seeks target track to the mix-in point before starting transition
-     * ENHANCED: Triggers FX pads during transition for creative mixing
+     * Trigger a manual transition to a specific deck
      */
-    async startMixPointTransition(targetDeckId: 'A' | 'B', mixInTime: number) {
+    async triggerManualTransition(targetDeckId: 'A' | 'B') {
         if (this.isMixing) return;
         this.isMixing = true;
-        console.log(`AutoDJ: Starting Mix Point Transition to ${targetDeckId} at ${mixInTime.toFixed(1)}s`);
 
-        const source = targetDeckId === 'A' ? this.deckB : this.deckA;
-        const target = targetDeckId === 'A' ? this.deckA : this.deckB;
-        const sourceEq = targetDeckId === 'A' ? this.mixer.eqB : this.mixer.eqA;
-        const targetEq = targetDeckId === 'A' ? this.mixer.eqA : this.mixer.eqB;
+        const activeDeck = targetDeckId === 'A' ? this.deckB : this.deckA;
+        const targetDeck = targetDeckId === 'A' ? this.deckA : this.deckB;
+        const activeTrack = activeDeck.track;
 
-        const now = Tone.now();
-        const duration = this.transitionDuration;
-        const halfDur = duration / 2;
-
-        // 1. Prepare Target - Seek to mix-in point
-        target.seek(mixInTime);
-        target.setSpeed(source.player.playbackRate as number);
-
-        // Kill Target Bass before starting
-        targetEq.low.value = -40;
-        targetEq.mid.value = 0;
-        targetEq.high.value = 0;
-
-        target.play();
-
-        // 2. Initial Crossfader Setup
-        const startX = targetDeckId === 'A' ? 1 : 0;
-        const endX = targetDeckId === 'A' ? 0 : 1;
-
-        this.mixer.crossfader.fade.cancelScheduledValues(now);
-        this.mixer.crossfader.fade.setValueAtTime(startX, now);
-
-        // 3. Phase 1: Bring in Target Highs/Mids + FX
-        this.mixer.crossfader.fade.linearRampToValueAtTime(0.5, now + halfDur);
-
-        // ENHANCEMENT: Trigger SNARE at halfway point for rhythmic transition
-        if (this.mixer.sampler) {
-            setTimeout(() => {
-                this.mixer.sampler?.trigger('SNARE');
-            }, (halfDur * 1000) - 50); // Slightly early for tightness
+        if (!activeTrack || !targetDeck.track) {
+            this.isMixing = false;
+            return;
         }
 
-        // 4. Phase 2: The Bass Swap + KICK
-        sourceEq.low.linearRampToValueAtTime(-40, now + halfDur + 0.5);
-        targetEq.low.linearRampToValueAtTime(0, now + halfDur + 0.5);
+        const params: TransitionParams = {
+            duration: this.transitionDuration,
+            type: 'SLAM_CUT', // Default manual transition
+            mixOutPoint: activeDeck.currentTime,
+            mixInPoint: 0,
+            sourceBpm: activeTrack.bpm || 120,
+            targetBpm: targetDeck.track.bpm || 120
+        };
 
-        // ENHANCEMENT: Trigger KICK when bass drops
-        if (this.mixer.sampler) {
-            setTimeout(() => {
-                this.mixer.sampler?.trigger('KICK');
-            }, ((halfDur + 0.5) * 1000));
-        }
-
-        // 5. Phase 3: Complete the mix
-        this.mixer.crossfader.fade.linearRampToValueAtTime(endX, now + duration);
-
-        // 6. Cleanup
-        setTimeout(() => {
-            this.isMixing = false;
-            this._activeDeckId = targetDeckId;
-            source.pause();
-            source.seek(0);
-            // Reset source EQs
-            sourceEq.low.value = 0;
-            sourceEq.mid.value = 0;
-            sourceEq.high.value = 0;
-            console.log(`AutoDJ: Mix Point Transition to ${targetDeckId} complete.`);
-        }, duration * 1000 + 500);
+        await this.transitionEngine.executeTransition(params, activeDeck, targetDeck);
+        this.isMixing = false;
+        this._activeDeckId = targetDeckId;
+        this._lastMixInPosition = params.mixInPoint || 0;
     }
 
     /**
-     * Advanced "Smart EQ" Transition (Legacy - used when no mix points available)
-     */
-    async startAdvancedTransition(targetDeckId: 'A' | 'B') {
-        if (this.isMixing) return;
-        this.isMixing = true;
-        console.log(`AutoDJ: Starting Advanced Transition to ${targetDeckId}`);
-
-        const source = targetDeckId === 'A' ? this.deckB : this.deckA;
-        const target = targetDeckId === 'A' ? this.deckA : this.deckB;
-        const sourceEq = targetDeckId === 'A' ? this.mixer.eqB : this.mixer.eqA;
-        const targetEq = targetDeckId === 'A' ? this.mixer.eqA : this.mixer.eqB;
-
-        const now = Tone.now();
-        const duration = this.transitionDuration;
-        const halfDur = duration / 2;
-
-        // 1. Prepare Target
-        target.setSpeed(source.player.playbackRate as number);
-
-        // Kill Target Bass before starting
-        targetEq.low.value = -40;
-        targetEq.mid.value = 0;
-        targetEq.high.value = 0;
-
-        target.play();
-
-        // 2. Initial Crossfader Setup
-        const startX = targetDeckId === 'A' ? 1 : 0;
-        const endX = targetDeckId === 'A' ? 0 : 1;
-
-        this.mixer.crossfader.fade.cancelScheduledValues(now);
-        this.mixer.crossfader.fade.setValueAtTime(startX, now);
-
-        // 3. Phase 1: Bring in Target Highs/Mids (Slowly move crossfader)
-        this.mixer.crossfader.fade.linearRampToValueAtTime(0.5, now + halfDur);
-
-        // 4. Phase 2: The Bass Swap (Drop the Bass on Target, Cut on Source)
-        sourceEq.low.linearRampToValueAtTime(-40, now + halfDur + 0.5);
-        targetEq.low.linearRampToValueAtTime(0, now + halfDur + 0.5);
-
-        // 5. Phase 3: Complete the mix
-        this.mixer.crossfader.fade.linearRampToValueAtTime(endX, now + duration);
-
-        // 6. Cleanup
-        setTimeout(() => {
-            this.isMixing = false;
-            this._activeDeckId = targetDeckId;
-            source.pause();
-            source.seek(0);
-            // Reset source EQs
-            sourceEq.low.value = 0;
-            sourceEq.mid.value = 0;
-            sourceEq.high.value = 0;
-            console.log(`AutoDJ: Advanced Transition to ${targetDeckId} complete.`);
-        }, duration * 1000 + 500);
-    }
-
-    /**
-     * Legacy method redirects to advanced
-     */
-    async startTransition(targetDeck: 'A' | 'B') {
-        return this.startAdvancedTransition(targetDeck);
-    }
-
-    /**
-     * Adjust target deck speed to match source deck BPM
+     * Sync BPM between source and target
      */
     syncBPM(source: Deck, target: Deck) {
-        // Mock BPM if missing (standard house 128)
-        const sourceBPM = source.track?.bpm || 128;
-        const targetBPM = target.track?.bpm || 128;
-
-        if (sourceBPM === targetBPM) return;
-
-        // Calculate required playback rate
-        // rate = sourceBPM / targetBPM
-        const rate = sourceBPM / targetBPM;
-
-        console.log(`AutoDJ: Syncing. Source: ${sourceBPM}, Target: ${targetBPM}, New Rate: ${rate.toFixed(2)}`);
-
-        // Ramp playback rate for smooth pitch change? Or instant?
-        // Instant for now to lock beat
-        target.setSpeed(rate);
+        if (!source.track || !target.track) return;
+        const sourceBpm = source.track.bpm || 128;
+        const targetBpm = target.track.bpm || 128;
+        target.setSpeed(sourceBpm / targetBpm);
+        console.log(`AutoDJ: Synced Deck ${target === this.deckA ? 'A' : 'B'} to ${sourceBpm} BPM`);
     }
 
     /**
@@ -324,37 +274,40 @@ export class AutoDJ {
      */
     async analyzeMixPoints() {
         console.log('=== ANALYZE MIX POINTS CALLED ===');
-        const trackA = this.deckA.track;
-        const trackB = this.deckB.track;
+        const activeDeck = this._activeDeckId === 'A' ? this.deckA : this.deckB;
+        const targetDeck = this._activeDeckId === 'A' ? this.deckB : this.deckA;
 
-        console.log(`TrackA: ${trackA?.title}, TrackB: ${trackB?.title}`);
+        const sourceTrack = activeDeck.track;
+        const targetTrack = targetDeck.track;
 
-        if (!trackA || !trackB) {
+        console.log(`Source: ${sourceTrack?.title}, Target: ${targetTrack?.title}`);
+
+        if (!sourceTrack || !targetTrack) {
             console.log('AutoDJ: Cannot analyze - need both tracks loaded');
             return;
         }
 
-        // Don't re-analyze if we already have mix points for this pair
-        const existingPair = trackA.mixPoints?.find(mp => mp.pairTrackId === trackB.id);
+        // Don't re-analyze if we already have mix points for this specific directional pairing
+        const existingPair = sourceTrack.mixPoints?.find(mp => mp.pairTrackId === targetTrack.id && mp.type === 'out');
         if (existingPair) {
-            console.log('AutoDJ: Mix points already analyzed for this track pair');
+            console.log('AutoDJ: Mix points already analyzed for this directional pair');
             return;
         }
 
-        console.log('AutoDJ: Analyzing mix points in background...');
+        console.log(`AutoDJ: Analyzing directional mix points (${this._activeDeckId} -> ${this._activeDeckId === 'A' ? 'B' : 'A'})...`);
 
         try {
             const result = await mixPointAnalyzer.analyzeTracks(
-                { ...trackA, duration: this.deckA.duration },
-                { ...trackB, duration: this.deckB.duration }
+                { ...sourceTrack, duration: activeDeck.duration },
+                { ...targetTrack, duration: targetDeck.duration }
             );
 
             // Update the tracks with discovered mix points
-            this.deckA.updateTrackMixPoints(result.trackA.mixPoints || []);
-            this.deckB.updateTrackMixPoints(result.trackB.mixPoints || []);
+            activeDeck.updateTrackMixPoints(result.source.mixPoints || []);
+            targetDeck.updateTrackMixPoints(result.target.mixPoints || []);
 
-            console.log(`AutoDJ: Discovered ${result.trackA.mixPoints?.length || 0} mix points for "${trackA.title}"`);
-            console.log(`AutoDJ: Discovered ${result.trackB.mixPoints?.length || 0} mix points for "${trackB.title}"`);
+            console.log(`AutoDJ: Discovered ${result.source.mixPoints?.length || 0} mix-out points for "${sourceTrack.title}"`);
+            console.log(`AutoDJ: Discovered ${result.target.mixPoints?.length || 0} mix-in points for "${targetTrack.title}"`);
         } catch (error) {
             console.error('AutoDJ: Mix point analysis failed:', error);
         }

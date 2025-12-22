@@ -28,12 +28,24 @@ export class Deck {
         this.player = new Tone.Player();
         this.meter = new Tone.Meter();
 
-        // Initialize effects
-        this.delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0 }).toDestination();
-        this.reverb = new Tone.Reverb({ decay: 1.5, wet: 0 }).toDestination();
-        this.filter = new Tone.Filter({ frequency: 20000, type: 'lowpass', Q: 1 });
+        // Initialize effects (BYPASSED by default for clean playback)
+        this.delay = new Tone.FeedbackDelay({
+            delayTime: 0.25,
+            feedback: 0,
+            wet: 0 // CRITICAL: Bypassed during normal playback
+        });
+        this.reverb = new Tone.Reverb({
+            decay: 1.5,
+            wet: 0 // CRITICAL: Bypassed during normal playback
+        });
+        this.filter = new Tone.Filter({
+            frequency: 20000, // Fully open (no filtering)
+            type: 'lowpass',
+            Q: 1
+        });
 
         // Signal chain: Player -> Filter -> Delay -> Reverb -> Meter -> (Output to Mixer)
+        // Effects are bypassed (wet=0) so signal passes through cleanly
         this.player.chain(this.filter, this.delay, this.reverb, this.meter);
     }
 
@@ -65,20 +77,56 @@ export class Deck {
     play() {
         if (this._isPlaying || !this._track || !this.player.loaded) return;
 
-        this.player.start(Tone.now(), this._pausedAt);
-        this._startedAt = Tone.now();
+        const now = Tone.now();
+        this.player.start(now, this._pausedAt);
+        this._startedAt = now;
+        this._isPlaying = true;
+    }
+
+    /**
+     * Start playback at a specific Tone.js scheduled time
+     */
+    playAt(time: number, offset?: number) {
+        if (!this._track || !this.player.loaded) return;
+
+        const startOffset = offset !== undefined ? offset : this._pausedAt;
+        this.player.start(time, startOffset);
+
+        // Update state logic for scheduled play
+        // Note: _isPlaying refers to logical state, but _startedAt must match Tone clock
+        this._startedAt = time;
+        this._pausedAt = startOffset;
         this._isPlaying = true;
     }
 
     pause() {
         if (!this._isPlaying) return;
 
-        this.player.stop();
+        const now = Tone.now();
+        this.player.stop(now);
         // Calculate current position to resume from
-        const elapsed = (Tone.now() - this._startedAt) * this.player.playbackRate;
+        const elapsed = (now - this._startedAt) * this.player.playbackRate;
         this._pausedAt += elapsed;
 
         this._isPlaying = false;
+    }
+
+    /**
+     * Stop playback at a specific Tone.js scheduled time
+     */
+    stopAt(time: number) {
+        if (!this._isPlaying) return;
+
+        this.player.stop(time);
+
+        // We can't easily calculate the exact _pausedAt for a future stop in this way
+        // without a more complex state tracker, but for transitions this is usually 
+        // followed by a seek(0) or load().
+        setTimeout(() => {
+            if (Tone.now() >= time) {
+                this._isPlaying = false;
+            }
+        }, (time - Tone.now()) * 1000);
     }
 
     setSpeed(rate: number) {

@@ -15,12 +15,12 @@ export class SamplerEngine {
         this.players.volume.value = 0;
     }
 
-    trigger(name: string) {
+    trigger(name: string, time?: number) {
         if (this.players.has(name)) {
-            // Restart if already playing (retrigger capability)
             const player = this.players.player(name);
-            player.stop();
-            player.start();
+            const startTime = time !== undefined ? time : Tone.now();
+            player.stop(startTime);
+            player.start(startTime);
         }
     }
 

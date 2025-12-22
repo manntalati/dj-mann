@@ -17,7 +17,7 @@ export class TransitionEngine {
      * Execute a transition with the specified parameters
      */
     async executeTransition(params: TransitionParams, sourceDeck: Deck, targetDeck: Deck): Promise<void> {
-        console.log(`TransitionEngine: Executing ${params.type} transition`);
+        console.log(`TransitionEngine: Executing ${params.type} transition (Liquid Precision 2.0)`);
 
         switch (params.type) {
             case 'ECHO_OUT':
@@ -41,269 +41,282 @@ export class TransitionEngine {
             case 'BUILD_CUT':
                 await this.buildCutTransition(params, sourceDeck, targetDeck);
                 break;
-            case 'SMART_EQ':
-                // Falls back to existing Smart EQ transition
-                console.log('Using Smart EQ transition (legacy)');
-                break;
             default:
                 console.warn(`Unknown transition type: ${params.type}`);
         }
     }
 
     /**
-     * ECHO OUT: Apply increasing delay/reverb to outgoing track
+     * ECHO OUT: Sample-accurate scheduling for echo tail mix
      */
     private async echoOutTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
-        const now = Tone.now();
+        const now = Tone.now() + 0.1; // Add tiny buffer for jitter-free start
         const duration = params.duration;
+        const targetDeckId = target === this.deckA ? 'A' : 'B';
+        const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // Prepare target
-        target.seek(params.mixInPoint);
-        target.play();
+        // 1. SCHEDULE TARGET START
+        target.playAt(now, params.mixInPoint);
+        target.player.volume.setValueAtTime(0, now);
 
-        // Phase 1 (0-50%): Gradually add delay to source
+        // 2. MIX DYNAMICS
+        this.mixer.crossfader.fade.cancelScheduledValues(now);
+        this.mixer.crossfader.fade.setValueAtTime(this.mixer.crossfader.fade.value, now);
+        this.mixer.crossfader.fade.linearRampToValueAtTime(targetX, now + duration);
+
+        // 3. SOURCE FX AUTOMATION
         source.delay.wet.setValueAtTime(0, now);
-        source.delay.wet.linearRampToValueAtTime(0.6, now + duration * 0.5);
+        source.delay.wet.linearRampToValueAtTime(0.7, now + duration * 0.4);
         source.delay.feedback.setValueAtTime(0, now);
-        source.delay.feedback.linearRampToValueAtTime(0.7, now + duration * 0.5);
+        source.delay.feedback.linearRampToValueAtTime(0.8, now + duration * 0.4);
 
-        // Phase 2 (50-100%): Increase feedback, cut dry signal, bring in target
-        source.delay.feedback.linearRampToValueAtTime(0.9, now + duration);
-        source.player.volume.linearRampToValueAtTime(-40, now + duration);
-        target.player.volume.setValueAtTime(-40, now);
-        target.player.volume.linearRampToValueAtTime(0, now + duration);
+        // 4. SOURCE FADE OUT
+        source.player.volume.cancelScheduledValues(now);
+        source.player.volume.setValueAtTime(source.player.volume.value, now);
+        source.player.volume.linearRampToValueAtTime(-40, now + duration * 0.8);
+        source.stopAt(now + duration);
 
-        setTimeout(() => {
-            source.pause();
-            source.delay.wet.value = 0;
-            source.delay.feedback.value = 0;
-            source.player.volume.value = 0;
-            console.log('Echo Out transition complete');
-        }, duration * 1000 + 500);
+        return new Promise<void>((resolve) => {
+            setTimeout(() => {
+                source.seek(0);
+                source.delay.wet.value = 0;
+                source.delay.feedback.value = 0;
+                source.player.volume.value = 0;
+                resolve();
+            }, (duration + 1) * 1000);
+        });
     }
 
     /**
-     * LOOP ROLL: Progressive loop shortening with filter sweep
+     * LOOP ROLL: Synchronized rhythmic loops
      */
     private async loopRollTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
-        const now = Tone.now();
+        const now = Tone.now() + 0.1;
         const bpm = params.sourceBpm;
         const beatDuration = 60 / bpm;
+        const duration = params.duration;
+        const targetDeckId = target === this.deckA ? 'A' : 'B';
+        const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // Calculate loop points (4, 2, 1, 1/2 bar)
+        // 1. START TARGET
+        target.playAt(now, params.mixInPoint);
+        target.player.volume.setValueAtTime(0, now);
+
+        // 2. GRADUAL CROSSFADE
+        this.mixer.crossfader.fade.cancelScheduledValues(now);
+        this.mixer.crossfader.fade.linearRampToValueAtTime(0.5, now + duration * 0.5);
+        this.mixer.crossfader.fade.linearRampToValueAtTime(targetX, now + duration);
+
+        // 3. PROGRESSIVE ROLL
         const loopDurations = [beatDuration * 16, beatDuration * 8, beatDuration * 4, beatDuration * 2];
-        const intervalDuration = params.duration / 4;
+        const intervalDuration = duration / 4;
 
-        // Prepare target
-        target.seek(params.mixInPoint);
+        loopDurations.forEach((loopLength, i) => {
+            const timeOffset = i * intervalDuration;
+            const scheduledTime = now + timeOffset;
 
-        // Execute progressive loops
-        for (let i = 0; i < loopDurations.length; i++) {
-            const startTime = now + (i * intervalDuration);
-            const loopLength = loopDurations[i];
-            const currentPos = source.currentTime;
-
-            // Set loop
-            source.setLoop(currentPos, currentPos + loopLength);
-            source.toggleLoop(true);
-
-            // Filter sweep (low-pass closing)
-            source.filter.frequency.setValueAtTime(20000, startTime);
-            source.filter.frequency.exponentialRampToValueAtTime(500, startTime + intervalDuration);
-
-            // Trigger FX sample on loop point
+            // Schedule rhythmic samples using Tone.ms for precise trigger
             if (this.mixer.sampler && i < loopDurations.length - 1) {
-                setTimeout(() => {
-                    this.mixer.sampler?.trigger(i % 2 === 0 ? 'KICK' : 'SNARE');
-                }, (i * intervalDuration) * 1000);
+                this.mixer.sampler.trigger(i % 2 === 0 ? 'KICK' : 'SNARE', scheduledTime);
             }
-        }
 
-        // Final: Hard cut to target with CRASH
-        setTimeout(() => {
-            source.clearLoop();
-            source.pause();
-            source.filter.frequency.value = 20000;
-            target.play();
-            this.mixer.sampler?.trigger('CRASH');
-            console.log('Loop Roll transition complete');
-        }, params.duration * 1000);
-    }
+            // Update loop point at exact scheduled time
+            Tone.Draw.schedule(() => {
+                const currentPos = source.currentTime;
+                source.setLoop(currentPos, currentPos + loopLength);
+                source.toggleLoop(true);
+            }, scheduledTime);
 
-    /**
-     * SLAM CUT: Beat-synced instant switch with filter swap
-     */
-    private async slamCutTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
-        const now = Tone.now();
-        const duration = params.duration;
-
-        // Prepare both tracks
-        target.seek(params.mixInPoint);
-
-        // Phase 1 (0-80%): Filter opposing frequencies
-        source.filter.type = 'highpass';
-        target.filter.type = 'lowpass';
-
-        source.filter.frequency.setValueAtTime(20, now);
-        source.filter.frequency.exponentialRampToValueAtTime(800, now + duration * 0.8);
-
-        target.filter.frequency.setValueAtTime(20000, now);
-        target.filter.frequency.exponentialRampToValueAtTime(800, now + duration * 0.8);
-        target.player.volume.value = 0;
-
-        // Phase 2 (80%): Instant hard cut with CRASH
-        setTimeout(() => {
-            source.pause();
-            source.filter.type = 'lowpass';
-            source.filter.frequency.value = 20000;
-            target.play();
-            target.filter.type = 'lowpass';
-            target.filter.frequency.value = 20000;
-            this.mixer.sampler?.trigger('CRASH');
-            console.log('Slam Cut transition complete');
-        }, duration * 0.8 * 1000);
-    }
-
-    /**
-     * SCRATCH: Simulate turntable scratching with playback rate changes
-     */
-    private async scratchTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
-        const now = Tone.now();
-        const duration = params.duration;
-        const scratchPattern = [1, 0.5, 2, -0.5, 1, 0.5, 2, 1]; // Chirp pattern
-        const scratchInterval = duration / scratchPattern.length;
-
-        // Prepare target
-        target.seek(params.mixInPoint);
-
-        // Execute scratch pattern
-        scratchPattern.forEach((rate, index) => {
-            setTimeout(() => {
-                source.player.playbackRate = Math.abs(rate);
-                if (rate < 0) {
-                    source.player.reverse = true;
-                } else {
-                    source.player.reverse = false;
-                }
-            }, (index * scratchInterval) * 1000);
+            // Filter sweep
+            source.filter.frequency.exponentialRampToValueAtTime(400, scheduledTime + intervalDuration);
         });
 
-        // Fade in target during scratch
-        target.player.volume.setValueAtTime(-40, now);
-        target.player.volume.linearRampToValueAtTime(0, now + duration);
-        target.play();
+        source.stopAt(now + duration);
 
-        setTimeout(() => {
-            source.pause();
-            source.player.playbackRate = 1;
-            source.player.reverse = false;
-            console.log('Scratch transition complete');
-        }, duration * 1000 + 100);
+        return new Promise<void>((resolve) => {
+            setTimeout(() => {
+                source.clearLoop();
+                source.filter.frequency.value = 20000;
+                source.seek(0);
+                if (this.mixer.sampler) this.mixer.sampler.trigger('CRASH', Tone.now());
+                resolve();
+            }, (duration + 0.5) * 1000);
+        });
     }
 
     /**
-     * ACAPELLA: Isolate vocals on source, blend over target intro
+     * SLAM CUT: Instant energy handoff
+     */
+    private async slamCutTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
+        const now = Tone.now() + 0.1;
+        const duration = params.duration;
+        const targetDeckId = target === this.deckA ? 'A' : 'B';
+        const targetX = targetDeckId === 'A' ? 0 : 1;
+
+        // 1. START TARGET
+        target.playAt(now, params.mixInPoint);
+        target.player.volume.setValueAtTime(0, now);
+
+        // 2. MIX BEFORE SLAM
+        this.mixer.crossfader.fade.cancelScheduledValues(now);
+        this.mixer.crossfader.fade.linearRampToValueAtTime(0.5, now + duration * 0.4);
+
+        // 3. FREQUENCY SEPARATION
+        source.filter.type = 'highpass';
+        target.filter.type = 'lowpass';
+        source.filter.frequency.setValueAtTime(20, now);
+        source.filter.frequency.exponentialRampToValueAtTime(1000, now + duration * 0.7);
+        target.filter.frequency.setValueAtTime(20000, now);
+        target.filter.frequency.exponentialRampToValueAtTime(1000, now + duration * 0.7);
+
+        // 4. THE SLAM
+        const slamTime = now + duration * 0.7;
+        this.mixer.crossfader.fade.setValueAtTime(targetX, slamTime);
+        source.stopAt(slamTime);
+
+        // Reset filters
+        source.filter.frequency.setValueAtTime(20000, slamTime);
+        target.filter.frequency.setValueAtTime(20000, slamTime);
+
+        if (this.mixer.sampler) this.mixer.sampler.trigger('CRASH', slamTime);
+
+        return new Promise<void>((resolve) => {
+            setTimeout(() => {
+                source.seek(0);
+                source.filter.type = 'lowpass';
+                target.filter.type = 'lowpass';
+                resolve();
+            }, (duration + 0.5) * 1000);
+        });
+    }
+
+    /**
+     * SCRATCH: Synchronized rate changes
+     */
+    private async scratchTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
+        const now = Tone.now() + 0.1;
+        const duration = params.duration;
+        const targetDeckId = target === this.deckA ? 'A' : 'B';
+        const targetX = targetDeckId === 'A' ? 0 : 1;
+
+        target.playAt(now, params.mixInPoint);
+        this.mixer.crossfader.fade.linearRampToValueAtTime(targetX, now + duration);
+
+        const scratchPattern = [1, 0.5, 2, -0.5, 1, 0.5, 2, 1];
+        const interval = duration / scratchPattern.length;
+
+        scratchPattern.forEach((rate, i) => {
+            const time = now + (i * interval);
+            Tone.Draw.schedule(() => {
+                source.player.playbackRate = Math.abs(rate);
+                source.player.reverse = rate < 0;
+            }, time);
+        });
+
+        source.stopAt(now + duration);
+
+        return new Promise<void>((resolve) => {
+            setTimeout(() => {
+                source.seek(0);
+                source.player.playbackRate = 1;
+                source.player.reverse = false;
+                resolve();
+            }, (duration + 0.5) * 1000);
+        });
+    }
+
+    /**
+     * ACAPELLA: Precise vocal blend
      */
     private async acapellaTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
-        const now = Tone.now();
+        const now = Tone.now() + 0.1;
         const duration = params.duration;
+        const targetDeckId = target === this.deckA ? 'A' : 'B';
+        const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // Prepare target
-        target.seek(params.mixInPoint);
-        target.play();
-
-        // Phase 1 (0-40%): Isolate vocals with band-pass (300Hz-3kHz)
+        target.playAt(now, params.mixInPoint);
         source.filter.type = 'bandpass';
-        source.filter.frequency.setValueAtTime(1650, now); // Center of vocal range
-        source.filter.Q.setValueAtTime(2, now); // Narrow band
+        source.filter.frequency.setValueAtTime(1650, now);
+        source.filter.Q.setValueAtTime(2, now);
 
-        // Phase 2 (40-100%): Gradually open target instrumental, fade vocals
-        setTimeout(() => {
-            target.player.volume.linearRampToValueAtTime(0, now + duration);
-            source.player.volume.linearRampToValueAtTime(-40, now + duration);
-        }, duration * 0.4 * 1000);
+        this.mixer.crossfader.fade.linearRampToValueAtTime(targetX, now + duration);
+        source.stopAt(now + duration);
 
-        setTimeout(() => {
-            source.pause();
-            source.filter.type = 'lowpass';
-            source.filter.frequency.value = 20000;
-            source.filter.Q.value = 1;
-            source.player.volume.value = 0;
-            console.log('Acapella transition complete');
-        }, duration * 1000 + 500);
+        return new Promise<void>((resolve) => {
+            setTimeout(() => {
+                source.seek(0);
+                source.filter.type = 'lowpass';
+                source.filter.frequency.value = 20000;
+                source.filter.Q.value = 1;
+                resolve();
+            }, (duration + 0.5) * 1000);
+        });
     }
 
     /**
-     * VINYL BRAKE: Exponential spindown simulation
+     * VINYL BRAKE: exponential spindown
      */
     private async vinylBrakeTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
+        const now = Tone.now() + 0.1;
         const duration = params.duration;
+        const targetDeckId = target === this.deckA ? 'A' : 'B';
+        const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // Prepare target
-        target.seek(params.mixInPoint);
+        target.playAt(now, params.mixInPoint);
+        this.mixer.crossfader.fade.linearRampToValueAtTime(targetX, now + duration);
 
-        // Exponential spindown (not linear!)
         const initialRate = source.player.playbackRate as number;
-        source.player.playbackRate = initialRate;
-
-        // Create exponential curve manually with steps
-        const steps = 20;
+        const steps = 30;
         for (let i = 0; i <= steps; i++) {
             const progress = i / steps;
-            const easedProgress = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
-            const rate = initialRate * (1 - easedProgress);
-            const timeOffset = (duration * progress) * 1000;
+            const eased = Math.pow(progress, 2);
+            const time = now + (duration * progress);
 
-            setTimeout(() => {
-                source.player.playbackRate = Math.max(0.01, rate);
-                // Close filter with spindown
-                const filterFreq = 20000 * (1 - easedProgress);
-                source.filter.frequency.value = Math.max(80, filterFreq);
-            }, timeOffset);
+            Tone.Draw.schedule(() => {
+                source.player.playbackRate = Math.max(0.001, initialRate * (1 - eased));
+                source.filter.frequency.value = Math.max(100, 20000 * (1 - eased));
+            }, time);
         }
 
-        // Start target at normal speed
-        setTimeout(() => {
-            target.play();
-            target.player.volume.value = 0;
-        }, duration * 0.5 * 1000);
+        source.stopAt(now + duration);
 
-        setTimeout(() => {
-            source.pause();
-            source.player.playbackRate = 1;
-            source.filter.frequency.value = 20000;
-            console.log('Vinyl Brake transition complete');
-        }, duration * 1000 + 500);
+        return new Promise<void>((resolve) => {
+            setTimeout(() => {
+                source.seek(0);
+                source.player.playbackRate = 1;
+                source.filter.frequency.value = 20000;
+                resolve();
+            }, (duration + 0.5) * 1000);
+        });
     }
 
     /**
-     * BUILD CUT: Use buildup section, drop bass on peak
+     * BUILD CUT: Energy swap on drop
      */
     private async buildCutTransition(params: TransitionParams, source: Deck, target: Deck): Promise<void> {
+        const now = Tone.now() + 0.1;
         const duration = params.duration;
-        const now = Tone.now();
+        const targetDeckId = target === this.deckA ? 'A' : 'B';
+        const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // Prepare target at buildup section
-        target.seek(params.mixInPoint);
-        target.play();
-
-        // Kill target bass during buildup
+        target.playAt(now, params.mixInPoint);
         const targetEq = target === this.deckA ? this.mixer.eqA : this.mixer.eqB;
         targetEq.low.setValueAtTime(-40, now);
-        targetEq.high.setValueAtTime(3, now); // Boost highs
 
-        // Cut source at low-energy moment
-        source.pause();
+        this.mixer.crossfader.fade.linearRampToValueAtTime(targetX, now + duration);
 
-        // Drop the bass on peak (80% through transition)
-        setTimeout(() => {
-            targetEq.low.linearRampToValueAtTime(0, now + duration);
-            targetEq.high.linearRampToValueAtTime(0, now + duration);
-            this.mixer.sampler?.trigger('KICK');
-        }, duration * 0.8 * 1000);
+        // Energy drop at 80%
+        const dropTime = now + duration * 0.8;
+        source.stopAt(dropTime);
+        targetEq.low.linearRampToValueAtTime(0, dropTime + 0.1);
 
-        setTimeout(() => {
-            console.log('Build Cut transition complete');
-        }, duration * 1000);
+        if (this.mixer.sampler) this.mixer.sampler.trigger('KICK', dropTime);
+
+        return new Promise<void>((resolve) => {
+            setTimeout(() => {
+                source.seek(0);
+                resolve();
+            }, (duration + 0.5) * 1000);
+        });
     }
 }

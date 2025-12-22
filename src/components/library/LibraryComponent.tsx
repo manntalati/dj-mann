@@ -4,15 +4,20 @@ import { useStore } from '../../store/useStore';
 import { libraryManager } from '../../audio/LibraryManager';
 import { audioEngine } from '../../audio/AudioEngine';
 import type { Track } from '../../audio/types';
-import { FolderOpen, Plus } from 'lucide-react';
+import { FolderOpen, Plus, ListMusic, PlayCircle, Trash2, ArrowRight } from 'lucide-react';
 
-interface LibraryComponentProps {
-    onAddToPlaylist: (track: Track) => void;
-}
-
-export const LibraryComponent: React.FC<LibraryComponentProps> = ({ onAddToPlaylist }) => {
+export const LibraryComponent: React.FC = () => {
+    // Store State
     const library = useStore((state) => state.library);
+    const playlist = useStore((state) => state.playlist);
+    const queue = useStore((state) => state.queue);
     const isScanning = useStore((state) => state.isScanning);
+
+    // Store Actions
+    const addToPlaylist = useStore((state) => state.addToPlaylist);
+    const removeFromPlaylist = useStore((state) => state.removeFromPlaylist);
+    const addToQueue = useStore((state) => state.addToQueue);
+    const removeFromQueue = useStore((state) => state.removeFromQueue);
 
     const handleOpenFolder = async () => {
         await libraryManager.openDirectory();
@@ -21,12 +26,52 @@ export const LibraryComponent: React.FC<LibraryComponentProps> = ({ onAddToPlayl
     const loadToDeck = async (track: Track, deckId: 'A' | 'B') => {
         const deck = deckId === 'A' ? audioEngine.deckA : audioEngine.deckB;
         await deck.load(track);
+        // Trigger mix point analysis when both tracks are loaded
+        audioEngine.autoDJ.analyzeMixPoints();
     };
+
+    const renderTrackRow = (track: Track, context: 'library' | 'queue' | 'playlist') => (
+        <div key={`${context}-${track.id}`} className={styles.trackRow}>
+            <div className={styles.trackMeta}>
+                <span className={styles.songTitle}>{track.title}</span>
+                <span className={styles.songArtist}>{track.artist}</span>
+            </div>
+            <div className={styles.actions}>
+                {context === 'library' && (
+                    <>
+                        <button className={styles.actionBtn} onClick={() => addToPlaylist(track)} title="Add to Playlist">
+                            <ListMusic size={14} />
+                        </button>
+                        <button className={styles.actionBtn} onClick={() => addToQueue(track)} title="Add to Queue">
+                            <Plus size={14} />
+                        </button>
+                    </>
+                )}
+                {context === 'playlist' && (
+                    <>
+                        <button className={styles.actionBtn} onClick={() => addToQueue(track)} title="Push to Queue">
+                            <ArrowRight size={14} />
+                        </button>
+                        <button className={`${styles.actionBtn} ${styles.removeBtn}`} onClick={() => removeFromPlaylist(track.id)} title="Remove">
+                            <Trash2 size={14} />
+                        </button>
+                    </>
+                )}
+                {context === 'queue' && (
+                    <button className={`${styles.actionBtn} ${styles.removeBtn}`} onClick={() => removeFromQueue(track.id)} title="Remove from Queue">
+                        <Trash2 size={14} />
+                    </button>
+                )}
+                <button className={`${styles.actionBtn} ${styles.loadBtn}`} onClick={() => loadToDeck(track, 'A')}>A</button>
+                <button className={`${styles.actionBtn} ${styles.loadBtn}`} onClick={() => loadToDeck(track, 'B')}>B</button>
+            </div>
+        </div>
+    );
 
     return (
         <div className={styles.library}>
             <div className={styles.header}>
-                <span className={styles.title}>MY LIBRARY</span>
+                <span className={styles.title}>MEDIA MANAGER</span>
                 <button
                     className={styles.scanBtn}
                     onClick={handleOpenFolder}
@@ -36,33 +81,66 @@ export const LibraryComponent: React.FC<LibraryComponentProps> = ({ onAddToPlayl
                 </button>
             </div>
 
-            <div className={styles.trackList}>
-                {library.length === 0 ? (
-                    <div className={styles.emptyState}>
-                        <FolderOpen size={48} className={styles.emptyIcon} />
-                        <p>No tracks loaded. Open a folder to start mixing.</p>
+            <div className={styles.panelsContainer}>
+                {/* 1. LIBRARY PANEL */}
+                <div className={styles.panel}>
+                    <div className={styles.panelHeader}>
+                        <FolderOpen size={14} />
+                        Library
                     </div>
-                ) : (
-                    library.map((track) => (
-                        <div key={track.id} className={styles.trackRow}>
-                            <div className={styles.trackMeta}>
-                                <span className={styles.songTitle}>{track.title}</span>
-                                <span className={styles.songArtist}>{track.artist}</span>
+                    <div className={styles.panelContent}>
+                        {library.length === 0 ? (
+                            <div className={styles.emptyState}>
+                                <FolderOpen size={32} className={styles.emptyIcon} />
+                                <p>No tracks imported.</p>
                             </div>
-                            <div className={styles.actions}>
-                                <button
-                                    className={styles.addQueueBtn}
-                                    onClick={() => onAddToPlaylist(track)}
-                                    title="Add to Queue"
-                                >
-                                    <Plus size={16} />
-                                </button>
-                                <button className={styles.loadBtn} onClick={() => loadToDeck(track, 'A')}>LOAD A</button>
-                                <button className={styles.loadBtn} onClick={() => loadToDeck(track, 'B')}>LOAD B</button>
+                        ) : (
+                            <div className={styles.trackList}>
+                                {library.map(t => renderTrackRow(t, 'library'))}
                             </div>
-                        </div>
-                    ))
-                )}
+                        )}
+                    </div>
+                </div>
+
+                {/* 2. QUEUE PANEL */}
+                <div className={styles.panel}>
+                    <div className={styles.panelHeader}>
+                        <PlayCircle size={14} />
+                        Live Queue
+                    </div>
+                    <div className={styles.panelContent}>
+                        {queue.length === 0 ? (
+                            <div className={styles.emptyState}>
+                                <PlayCircle size={32} className={styles.emptyIcon} />
+                                <p>Queue is empty.</p>
+                            </div>
+                        ) : (
+                            <div className={styles.trackList}>
+                                {queue.map(t => renderTrackRow(t, 'queue'))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 3. PLAYLIST PANEL */}
+                <div className={styles.panel}>
+                    <div className={styles.panelHeader}>
+                        <ListMusic size={14} />
+                        Session Playlist
+                    </div>
+                    <div className={styles.panelContent}>
+                        {playlist.length === 0 ? (
+                            <div className={styles.emptyState}>
+                                <ListMusic size={32} className={styles.emptyIcon} />
+                                <p>Playlist is empty.</p>
+                            </div>
+                        ) : (
+                            <div className={styles.trackList}>
+                                {playlist.map(t => renderTrackRow(t, 'playlist'))}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

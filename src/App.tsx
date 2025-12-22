@@ -4,32 +4,14 @@ import { DeckComponent } from './components/deck/DeckComponent';
 import { MixerComponent } from './components/mixer/MixerComponent';
 import { MainLayout } from './components/layout/MainLayout';
 import { LibraryComponent } from './components/library/LibraryComponent';
-import { PlaylistQueue } from './components/playlist/PlaylistQueue';
-import type { Track } from './audio/types';
 import './index.css';
 
 function App() {
   const [ready, setReady] = useState(false);
-  const [playlistTracks, setPlaylistTracks] = useState<Track[]>([]);
 
   const startAudio = async () => {
     await audioEngine.init();
     setReady(true);
-  };
-
-  const handleAddToPlaylist = (track: Track) => {
-    setPlaylistTracks(prev => [...prev, track]);
-  };
-
-  const handleRemoveFromPlaylist = (trackId: string) => {
-    setPlaylistTracks(prev => prev.filter(t => t.id !== trackId));
-  };
-
-  const handleLoadToDeck = async (track: Track, deckId: 'A' | 'B') => {
-    const deck = deckId === 'A' ? audioEngine.deckA : audioEngine.deckB;
-    await deck.load(track);
-    // Trigger mix point analysis when both tracks loaded
-    audioEngine.autoDJ.analyzeMixPoints();
   };
 
   if (!ready) {
@@ -70,14 +52,7 @@ function App() {
       leftDeck={<DeckComponent deck={audioEngine.deckA} id="A" />}
       mixer={<MixerComponent mixer={audioEngine.mixer} />}
       rightDeck={<DeckComponent deck={audioEngine.deckB} id="B" />}
-      playlistQueue={
-        <PlaylistQueue
-          tracks={playlistTracks}
-          onRemove={handleRemoveFromPlaylist}
-          onLoadToDeck={handleLoadToDeck}
-        />
-      }
-      library={<LibraryComponent onAddToPlaylist={handleAddToPlaylist} />}
+      bottomPanel={<LibraryComponent />}
     />
   );
 }
