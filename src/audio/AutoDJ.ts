@@ -123,6 +123,7 @@ export class AutoDJ {
     /**
      * Start a transition using discovered mix points
      * Seeks target track to the mix-in point before starting transition
+     * ENHANCED: Triggers FX pads during transition for creative mixing
      */
     async startMixPointTransition(targetDeckId: 'A' | 'B', mixInTime: number) {
         if (this.isMixing) return;
@@ -156,12 +157,26 @@ export class AutoDJ {
         this.mixer.crossfader.fade.cancelScheduledValues(now);
         this.mixer.crossfader.fade.setValueAtTime(startX, now);
 
-        // 3. Phase 1: Bring in Target Highs/Mids
+        // 3. Phase 1: Bring in Target Highs/Mids + FX
         this.mixer.crossfader.fade.linearRampToValueAtTime(0.5, now + halfDur);
 
-        // 4. Phase 2: The Bass Swap
+        // ENHANCEMENT: Trigger SNARE at halfway point for rhythmic transition
+        if (this.mixer.sampler) {
+            setTimeout(() => {
+                this.mixer.sampler?.trigger('SNARE');
+            }, (halfDur * 1000) - 50); // Slightly early for tightness
+        }
+
+        // 4. Phase 2: The Bass Swap + KICK
         sourceEq.low.linearRampToValueAtTime(-40, now + halfDur + 0.5);
         targetEq.low.linearRampToValueAtTime(0, now + halfDur + 0.5);
+
+        // ENHANCEMENT: Trigger KICK when bass drops
+        if (this.mixer.sampler) {
+            setTimeout(() => {
+                this.mixer.sampler?.trigger('KICK');
+            }, ((halfDur + 0.5) * 1000));
+        }
 
         // 5. Phase 3: Complete the mix
         this.mixer.crossfader.fade.linearRampToValueAtTime(endX, now + duration);

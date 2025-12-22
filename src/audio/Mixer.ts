@@ -4,25 +4,31 @@ import { Deck } from './Deck';
 export class Mixer {
     public channelA: Tone.Channel;
     public channelB: Tone.Channel;
-    public crossfader: Tone.CrossFade;
     public eqA: Tone.EQ3;
     public eqB: Tone.EQ3;
+    public crossfader: Tone.CrossFade;
+    public master: Tone.Gain;
+    public sampler: import('./SamplerEngine').SamplerEngine | null = null;
 
     constructor() {
-        this.channelA = new Tone.Channel();
-        this.channelB = new Tone.Channel();
-        this.crossfader = new Tone.CrossFade();
+        this.channelA = new Tone.Channel({ volume: 0 });
+        this.channelB = new Tone.Channel({ volume: 0 });
 
+        // EQs
         this.eqA = new Tone.EQ3();
         this.eqB = new Tone.EQ3();
 
-        // Signal Chain:
-        // Deck Output -> Channel (Vol/Pan/Solo) -> EQ -> Crossfader -> Destination
+        // Crossfader
+        this.crossfader = new Tone.CrossFade(0.5);
 
+        // Master output
+        this.master = new Tone.Gain(1).toDestination();
+
+        // Route: Channel -> EQ -> Crossfader -> Master
         this.channelA.chain(this.eqA, this.crossfader.a);
         this.channelB.chain(this.eqB, this.crossfader.b);
 
-        this.crossfader.toDestination();
+        this.crossfader.connect(this.master);
     }
 
     bindDecks(deckA: Deck, deckB: Deck) {

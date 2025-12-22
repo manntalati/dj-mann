@@ -88,13 +88,31 @@
 .actions {
     display: flex;
     gap: 8px;
-    margin-left: 16px;
-    opacity: 0.3;
-    transition: opacity 0.2s;
 }
 
 .trackRow:hover .actions {
     opacity: 1;
+}
+
+.addQueueBtn {
+    padding: 6px 10px;
+    background: rgba(var(--accent-primary-rgb), 0.1);
+    border: 1px solid var(--accent-primary);
+    color: var(--accent-primary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.7rem;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.addQueueBtn:hover {
+    background: var(--accent-primary);
+    color: var(--bg-dark);
+    transform: translateY(-1px);
 }
 
 .loadBtn {

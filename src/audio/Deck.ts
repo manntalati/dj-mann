@@ -11,6 +11,14 @@ export class Deck {
     private _pausedAt: number = 0; // Offset in seconds within the track
     private _startedAt: number = 0; // Tone.now() when playback started (last resume)
 
+    // Loop state
+    private _loopEnabled: boolean = false;
+    private _loopStart: number = 0;
+    private _loopEnd: number = 0;
+
+    // Hot cues (up to 8)
+    private _hotCues: Map<number, number> = new Map(); // index -> time in seconds
+
     constructor() {
         this.player = new Tone.Player();
         this.meter = new Tone.Meter();
@@ -115,5 +123,89 @@ export class Deck {
         if (this._track) {
             this._track = { ...this._track, mixPoints };
         }
+    }
+
+    // === LOOP CONTROLS ===
+
+    /**
+     * Set loop points (in seconds)
+     */
+    setLoop(start: number, end: number) {
+        if (start >= 0 && end > start && end <= this.duration) {
+            this._loopStart = start;
+            this._loopEnd = end;
+            this.player.loop = true;
+            this.player.loopStart = start;
+            this.player.loopEnd = end;
+        }
+    }
+
+    /**
+     * Enable/disable loop
+     */
+    toggleLoop(enabled?: boolean) {
+        this._loopEnabled = enabled !== undefined ? enabled : !this._loopEnabled;
+        this.player.loop = this._loopEnabled;
+    }
+
+    /**
+     * Set loop based on bar length (assumes 4/4 time)
+     */
+    setLoopBars(bars: number) {
+        if (!this._track?.bpm) return;
+
+        const beatsPerBar = 4;
+        const secondsPerBeat = 60 / this._track.bpm;
+        const loopLength = bars * beatsPerBar * secondsPerBeat;
+
+        const currentPos = this.currentTime;
+        this.setLoop(currentPos, currentPos + loopLength);
+        this.toggleLoop(true);
+    }
+
+    /**
+     * Clear loop
+     */
+    clearLoop() {
+        this._loopEnabled = false;
+        this.player.loop = false;
+    }
+
+    get loopEnabled() { return this._loopEnabled; }
+    get loopStart() { return this._loopStart; }
+    get loopEnd() { return this._loopEnd; }
+
+    // === HOT CUES ===
+
+    /**
+     * Set a hot cue at current position
+     */
+    setCue(index: number, time?: number) {
+        const cueTime = time !== undefined ? time : this.currentTime;
+        this._hotCues.set(index, cueTime);
+    }
+
+    /**
+     * Jump to a hot cue
+     */
+    jumpToCue(index: number) {
+        const cueTime = this._hotCues.get(index);
+        if (cueTime !== undefined) {
+            this.seek(cueTime);
+        }
+    }
+
+    /**
+     * Delete a hot cue
+     */
+    deleteCue(index: number) {
+        this._hotCues.delete(index);
+    }
+
+    /**
+     * Get all hot cues
+     */
+    get hotCues(): Map<number, number> {
+        return new Map(this._hotCues);
     }
 }

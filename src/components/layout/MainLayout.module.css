@@ -33,9 +33,25 @@
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.libraryRow {
+.bottomRow {
+    display: flex;
     height: 35vh;
+    gap: var(--spacing-sm);
+    padding: 0 var(--spacing-md) var(--spacing-md);
+}
+
+.queueContainer {
+    width: 400px;
     background: var(--bg-panel);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding: var(--spacing-sm);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+}
+
+.libraryContainer {
+    flex: 1;
+    background: var(--bg-panel);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden;
 }

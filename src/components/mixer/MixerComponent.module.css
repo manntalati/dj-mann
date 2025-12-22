@@ -3,7 +3,8 @@
     flex-direction: column;
     height: 100%;
     color: var(--text-main);
-    padding: var(--spacing-sm);
+    padding: 12px 8px 8px 8px;
+    gap: 12px;
 }
 
 .channelsSection {
@@ -17,20 +18,21 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: 16px;
     height: 100%;
-    padding-top: var(--spacing-md);
+    padding-top: 8px;
 }
 
 .eqSection {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    margin-bottom: 12px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 8px;
-    border-radius: var(--radius-md);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 14px;
+    margin-bottom: 8px;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 12px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    min-width: 70px;
 }
 
 .sliderTrack {
@@ -61,9 +63,11 @@
 }
 
 .channelLabel {
-    font-size: 0.8rem;
-    font-weight: bold;
+    font-size: 0.75rem;
+    font-weight: 700;
     color: var(--text-muted);
+    letter-spacing: 0.5px;
+    margin-top: 4px;
 }
 
 .masterSection {
@@ -80,15 +84,15 @@
 }
 
 .xfaderSection {
-    height: 60px;
+    height: 64px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: var(--radius-md);
-    padding: 0 var(--spacing-md);
-    margin-top: var(--spacing-md);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+    padding: 0 16px;
+    margin-top: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .xfaderLabels {
@@ -111,6 +115,7 @@
 
 .crossfader::-webkit-slider-thumb {
     -webkit-appearance: none;
+    appearance: none;
     width: 30px;
     height: 16px;
     background: var(--text-main);

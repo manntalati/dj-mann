@@ -23,6 +23,9 @@ class AudioEngine {
         // Connect Decks to Mixer
         this.mixer.bindDecks(this.deckA, this.deckB);
 
+        // Wire sampler to mixer for Auto-Pilot FX
+        this.mixer.sampler = this.sampler;
+
         // Init AutoDJ
         this.autoDJ = new AutoDJ(this.deckA, this.deckB, this.mixer);
     }

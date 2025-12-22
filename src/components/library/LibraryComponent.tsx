@@ -4,9 +4,13 @@ import { useStore } from '../../store/useStore';
 import { libraryManager } from '../../audio/LibraryManager';
 import { audioEngine } from '../../audio/AudioEngine';
 import type { Track } from '../../audio/types';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Plus } from 'lucide-react';
 
-export const LibraryComponent: React.FC = () => {
+interface LibraryComponentProps {
+    onAddToPlaylist: (track: Track) => void;
+}
+
+export const LibraryComponent: React.FC<LibraryComponentProps> = ({ onAddToPlaylist }) => {
     const library = useStore((state) => state.library);
     const isScanning = useStore((state) => state.isScanning);
 
@@ -46,6 +50,13 @@ export const LibraryComponent: React.FC = () => {
                                 <span className={styles.songArtist}>{track.artist}</span>
                             </div>
                             <div className={styles.actions}>
+                                <button
+                                    className={styles.addQueueBtn}
+                                    onClick={() => onAddToPlaylist(track)}
+                                    title="Add to Queue"
+                                >
+                                    <Plus size={16} />
+                                </button>
                                 <button className={styles.loadBtn} onClick={() => loadToDeck(track, 'A')}>LOAD A</button>
                                 <button className={styles.loadBtn} onClick={() => loadToDeck(track, 'B')}>LOAD B</button>
                             </div>

@@ -5,10 +5,11 @@ interface MainLayoutProps {
     leftDeck: React.ReactNode;
     mixer: React.ReactNode;
     rightDeck: React.ReactNode;
+    playlistQueue: React.ReactNode;
     library: React.ReactNode;
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftDeck, mixer, rightDeck, library }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftDeck, mixer, rightDeck, playlistQueue, library }) => {
     return (
         <div className={styles.container}>
             <div className={styles.decksRow}>
@@ -16,8 +17,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftDeck, mixer, rightDe
                 <div className={styles.mixerContainer}>{mixer}</div>
                 <div className={styles.deckContainer}>{rightDeck}</div>
             </div>
-            <div className={styles.libraryRow}>
-                {library}
+            <div className={styles.bottomRow}>
+                <div className={styles.queueContainer}>
+                    {playlistQueue}
+                </div>
+                <div className={styles.libraryContainer}>
+                    {library}
+                </div>
             </div>
         </div>
     );
