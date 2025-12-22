@@ -48,8 +48,8 @@ export class MixPointAnalyzer {
         }
 
         // Sort by score and keep top candidates
-        mixPointsA.sort((a, b) => b.score - a.score);
-        mixPointsB.sort((a, b) => b.score - a.score);
+        mixPointsA.sort((a, b) => (b.score || 0) - (a.score || 0));
+        mixPointsB.sort((a, b) => (b.score || 0) - (a.score || 0));
 
         return {
             trackA: { ...trackA, mixPoints: mixPointsA.slice(0, 3) },

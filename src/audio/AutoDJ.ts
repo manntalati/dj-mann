@@ -1,7 +1,10 @@
 import * as Tone from 'tone';
-import { Deck } from './Deck';
-import { Mixer } from './Mixer';
+import type { Deck } from './Deck';
+import type { Mixer } from './Mixer';
 import { mixPointAnalyzer } from './mixPointAnalysis';
+import { TransitionEngine } from './TransitionEngine';
+import { TransitionSelector } from './TransitionSelector';
+import type { TransitionParams } from './types';
 
 export class AutoDJ {
     private deckA: Deck;
@@ -10,17 +13,25 @@ export class AutoDJ {
 
     // Config
     private transitionDuration: number = 8; // Longer for smoother EQ mix
-    private autoPilotThreshold: number = 30; // seconds remaining to trigger mix
-    private isMixing: boolean = false;
-    private _isAutoPilot: boolean = false;
+    private autoPilotThreshold: number = 10; // seconds remaining to trigger mix
+    public isMixing: boolean = false;
+    private _isAutoPilot: boolean = false; // Renamed to _autoPilotEnabled in instruction, but keeping original name for consistency with getters/setters
     private _activeDeckId: 'A' | 'B' = 'A';
-    private _monitorInterval: any = null;
+    private _monitorInterval: number | null = null; // Changed type from any to number | null
     private _timeRemaining: number = 0;
+
+    // New: Advanced transition system
+    private transitionEngine: TransitionEngine;
+    private transitionSelector: TransitionSelector;
 
     constructor(deckA: Deck, deckB: Deck, mixer: Mixer) {
         this.deckA = deckA;
         this.deckB = deckB;
         this.mixer = mixer;
+
+        // Initialize transition system
+        this.transitionEngine = new TransitionEngine(deckA, deckB, mixer);
+        this.transitionSelector = new TransitionSelector();
     }
 
     public get isAutoPilot() { return this._isAutoPilot; }
@@ -65,7 +76,10 @@ export class AutoDJ {
         this._timeRemaining = 0;
     }
 
-    private monitor() {
+    /**
+     * Monitor active deck playback for mix points
+     */
+    private async monitor() {
         if (!this._isAutoPilot || this.isMixing) return;
 
         const activeDeck = this._activeDeckId === 'A' ? this.deckA : this.deckB;
@@ -97,15 +111,38 @@ export class AutoDJ {
                     console.log(`[Monitor] Found mix-out at ${nextMixOut.time.toFixed(1)}s (current: ${currentTime.toFixed(1)}s)`);
                     // Find corresponding mix-in point on target track
                     const targetTrack = targetDeck.track;
-                    const correspondingMixIn = targetTrack.mixPoints?.find(mp =>
+                    let correspondingMixIn = targetTrack.mixPoints?.find(mp =>
                         mp.type === 'in' &&
                         mp.pairTrackId === activeTrack.id &&
+                        (mp.score !== undefined && nextMixOut.score !== undefined) &&
                         Math.abs(mp.score - nextMixOut.score) < 5 // Same quality transition
                     );
 
                     if (correspondingMixIn) {
                         console.log(`AutoDJ: Triggering mix - OUT at ${nextMixOut.time.toFixed(1)}s, IN at ${correspondingMixIn.time.toFixed(1)}s`);
-                        this.startMixPointTransition(targetDeckId, correspondingMixIn.time);
+
+                        // NEW: Use TransitionEngine with intelligent selection
+                        const transitionType = this.transitionSelector.selectTransition(
+                            nextMixOut,
+                            correspondingMixIn,
+                            activeTrack,
+                            targetTrack
+                        );
+
+                        console.log(`AutoDJ: Selected transition type: ${transitionType}`);
+
+                        const params: TransitionParams = {
+                            duration: this.transitionDuration,
+                            type: transitionType,
+                            mixOutPoint: nextMixOut.time,
+                            mixInPoint: correspondingMixIn.time,
+                            sourceBpm: activeTrack.bpm || 120,
+                            targetBpm: targetTrack.bpm || 120
+                        };
+
+                        await this.transitionEngine.executeTransition(params, activeDeck, targetDeck);
+                        this.isMixing = false;
+                        this._activeDeckId = targetDeckId;
                         return;
                     }
                 }

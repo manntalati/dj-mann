@@ -8,9 +8,10 @@ interface KnobProps {
     onChange: (value: number) => void;
     label: string;
     description?: string;
+    size?: number; // Diameter in pixels, default 60
 }
 
-export const Knob: React.FC<KnobProps> = ({ min, max, value, onChange, label }) => {
+export const Knob: React.FC<KnobProps> = ({ min, max, value, onChange, label, size = 60 }) => {
     const [dragging, setDragging] = useState(false);
     const [startY, setStartY] = useState(0);
     const [startVal, setStartVal] = useState(0);
@@ -64,7 +65,12 @@ export const Knob: React.FC<KnobProps> = ({ min, max, value, onChange, label }) 
 
     return (
         <div className={styles.container}>
-            <div className={styles.knobOuter} onMouseDown={handleMouseDown} ref={knobRef}>
+            <div
+                className={styles.knobOuter}
+                onMouseDown={handleMouseDown}
+                ref={knobRef}
+                style={{ width: `${size}px`, height: `${size}px` }}
+            >
                 <div
                     className={styles.knobInner}
                     style={{ transform: `rotate(${rotation}deg)` }}

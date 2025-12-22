@@ -19,11 +19,22 @@ export class Deck {
     // Hot cues (up to 8)
     private _hotCues: Map<number, number> = new Map(); // index -> time in seconds
 
+    // Audio effects for creative transitions
+    public delay: Tone.FeedbackDelay;
+    public reverb: Tone.Reverb;
+    public filter: Tone.Filter;
+
     constructor() {
         this.player = new Tone.Player();
         this.meter = new Tone.Meter();
-        // Signal chain: Player -> Meter -> (Output to Mixer)
-        this.player.connect(this.meter);
+
+        // Initialize effects
+        this.delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0 }).toDestination();
+        this.reverb = new Tone.Reverb({ decay: 1.5, wet: 0 }).toDestination();
+        this.filter = new Tone.Filter({ frequency: 20000, type: 'lowpass', Q: 1 });
+
+        // Signal chain: Player -> Filter -> Delay -> Reverb -> Meter -> (Output to Mixer)
+        this.player.chain(this.filter, this.delay, this.reverb, this.meter);
     }
 
     /**

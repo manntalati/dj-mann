@@ -10,8 +10,10 @@
 .channelsSection {
     flex: 1;
     display: flex;
-    justify-content: space-around;
-    align-items: center;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 0 4px;
 }
 
 .channelStrip {
@@ -74,6 +76,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* NEW CENTER SECTION */
+.centerSection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 4px;
+    min-width: 140px;
+}
+
+.fxPadsContainer {
+    /* FX Pads will size themselves */
+}
+
+.autoPilotCompact {
+    width: 100%;
+    /* Auto-Pilot will be ultra-compact */
 }
 
 .logoText {

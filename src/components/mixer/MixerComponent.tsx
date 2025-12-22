@@ -50,11 +50,12 @@ export const MixerComponent: React.FC<MixerComponentProps> = ({ mixer }) => {
     return (
         <div className={styles.mixer}>
             <div className={styles.channelsSection}>
+                {/* LEFT CHANNEL - DECK A */}
                 <div className={styles.channelStrip}>
                     <div className={styles.eqSection}>
-                        <Knob label="HIGH" min={-20} max={10} value={eqA.high} onChange={(v) => handleEQ('A', 'high', v)} />
-                        <Knob label="MID" min={-20} max={10} value={eqA.mid} onChange={(v) => handleEQ('A', 'mid', v)} />
-                        <Knob label="LOW" min={-20} max={10} value={eqA.low} onChange={(v) => handleEQ('A', 'low', v)} />
+                        <Knob label="HIGH" min={-20} max={10} value={eqA.high} onChange={(v) => handleEQ('A', 'high', v)} size={70} />
+                        <Knob label="MID" min={-20} max={10} value={eqA.mid} onChange={(v) => handleEQ('A', 'mid', v)} size={70} />
+                        <Knob label="LOW" min={-20} max={10} value={eqA.low} onChange={(v) => handleEQ('A', 'low', v)} size={70} />
                     </div>
                     <label className={styles.channelLabel}>VOL A</label>
                     <div className={styles.sliderTrack}>
@@ -68,20 +69,22 @@ export const MixerComponent: React.FC<MixerComponentProps> = ({ mixer }) => {
                     </div>
                 </div>
 
-                <div className={styles.masterSection}>
-                    {/* Master VU or options */}
-                    <span className={styles.logoText}>MIXER</span>
-                    <div style={{ marginTop: '20px' }}>
+                {/* CENTER SECTION - FX + AUTO-PILOT */}
+                <div className={styles.centerSection}>
+                    <div className={styles.fxPadsContainer}>
                         <SamplerComponent sampler={audioEngine.sampler} />
+                    </div>
+                    <div className={styles.autoPilotCompact}>
                         <AutoDJSect />
                     </div>
                 </div>
 
+                {/* RIGHT CHANNEL - DECK B */}
                 <div className={styles.channelStrip}>
                     <div className={styles.eqSection}>
-                        <Knob label="HIGH" min={-20} max={10} value={eqB.high} onChange={(v) => handleEQ('B', 'high', v)} />
-                        <Knob label="MID" min={-20} max={10} value={eqB.mid} onChange={(v) => handleEQ('B', 'mid', v)} />
-                        <Knob label="LOW" min={-20} max={10} value={eqB.low} onChange={(v) => handleEQ('B', 'low', v)} />
+                        <Knob label="HIGH" min={-20} max={10} value={eqB.high} onChange={(v) => handleEQ('B', 'high', v)} size={70} />
+                        <Knob label="MID" min={-20} max={10} value={eqB.mid} onChange={(v) => handleEQ('B', 'mid', v)} size={70} />
+                        <Knob label="LOW" min={-20} max={10} value={eqB.low} onChange={(v) => handleEQ('B', 'low', v)} size={70} />
                     </div>
                     <label className={styles.channelLabel}>VOL B</label>
                     <div className={styles.sliderTrack}>
@@ -96,6 +99,7 @@ export const MixerComponent: React.FC<MixerComponentProps> = ({ mixer }) => {
                 </div>
             </div>
 
+            {/* CROSSFADER */}
             <div className={styles.xfaderSection}>
                 <div className={styles.xfaderLabels}>
                     <span>A</span>

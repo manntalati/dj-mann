@@ -10,10 +10,32 @@ export interface Track {
 }
 
 export interface MixPoint {
-    time: number;        // Position in seconds
-    type: 'in' | 'out';  // Mix-in or mix-out point
-    score: number;       // Quality score 0-100
+    time: number; // Position in seconds
+    type: 'in' | 'out'; // Mix in or mix out point
+    matchingTime?: number; // Corresponding time on the other track
+    score?: number; // Quality score (0-100)
+    suggestedTransition?: TransitionType; // AI-suggested transition type
     pairTrackId?: string; // ID of the paired track this works well with
+}
+
+// Transition types for creative mixing
+export type TransitionType =
+    | 'ECHO_OUT'
+    | 'LOOP_ROLL'
+    | 'SLAM_CUT'
+    | 'SCRATCH'
+    | 'ACAPELLA'
+    | 'VINYL_BRAKE'
+    | 'BUILD_CUT'
+    | 'SMART_EQ'; // Existing transition type
+
+export interface TransitionParams {
+    duration: number; // Total transition length in seconds
+    type: TransitionType;
+    mixInPoint: number; // Time on target track
+    mixOutPoint: number; // Time on source track
+    sourceBpm: number;
+    targetBpm: number;
 }
 
 export interface DeckState {
