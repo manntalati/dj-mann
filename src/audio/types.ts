@@ -27,7 +27,11 @@ export type TransitionType =
     | 'ACAPELLA'
     | 'VINYL_BRAKE'
     | 'BUILD_CUT'
-    | 'SMART_EQ'; // Existing transition type
+    | 'SMART_EQ'
+    | 'GRADUAL_CROSSFADE'
+    | 'REVERB_WASH'
+    | 'PHASER_BUILD'
+    | 'BEAT_MATCHED';
 
 export interface TransitionParams {
     duration: number; // Total transition length in seconds

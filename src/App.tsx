@@ -26,19 +26,38 @@ function App() {
         color: 'var(--text-main)',
         fontFamily: 'var(--font-main)'
       }}>
-        <h1 style={{ marginBottom: '20px', fontSize: '3rem', letterSpacing: '4px' }}>DJ MANN</h1>
+        <h1 style={{ 
+          marginBottom: 'var(--spacing-xl)', 
+          fontSize: '3.5rem', 
+          letterSpacing: '2px',
+          fontWeight: 'var(--font-weight-black)',
+          background: 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary-hover) 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text'
+        }}>DJ MANN</h1>
         <button
           onClick={startAudio}
           style={{
-            padding: '12px 32px',
-            fontSize: '1.2rem',
+            padding: '14px 40px',
+            fontSize: '1rem',
             background: 'var(--accent-primary)',
             color: 'var(--bg-dark)',
             border: 'none',
             borderRadius: 'var(--radius-full)',
             cursor: 'pointer',
-            fontWeight: 700,
-            boxShadow: '0 0 20px rgba(0, 240, 255, 0.3)'
+            fontWeight: 'var(--font-weight-bold)',
+            boxShadow: 'var(--shadow-lg)',
+            transition: 'all var(--transition-fast)',
+            letterSpacing: '0.5px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--accent-primary-hover)';
+            e.currentTarget.style.transform = 'scale(1.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--accent-primary)';
+            e.currentTarget.style.transform = 'scale(1)';
           }}
         >
           ENTER BOOTH

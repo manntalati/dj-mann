@@ -15,9 +15,9 @@ body,
   /* App-like behavior */
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar - Spotify Style */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 12px;
 }
 
 ::-webkit-scrollbar-track {
@@ -25,10 +25,25 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-panel);
+  background: rgba(255, 255, 255, 0.3);
   border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: rgba(255, 255, 255, 0.5);
+  background-clip: padding-box;
+}
+
+/* Smooth transitions for interactive elements */
+button, a, input {
+  transition: all var(--transition-fast);
+}
+
+/* Focus styles */
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
