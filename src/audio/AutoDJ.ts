@@ -141,7 +141,6 @@ export class AutoDJ {
                         // NEW: Use TransitionEngine with intelligent selection
                         const transitionType = this.transitionSelector.selectTransition(
                             nextMixOut,
-                            correspondingMixIn,
                             activeTrack,
                             targetTrack
                         );
