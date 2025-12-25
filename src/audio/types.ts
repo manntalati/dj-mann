@@ -6,6 +6,8 @@ export interface Track {
     bpm?: number;
     duration: number;
     file?: File;
+    album?: string;
+    dateAdded?: string;
     mixPoints?: MixPoint[]; // Discovered optimal mix-in/out points
 }
 

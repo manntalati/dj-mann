@@ -53,19 +53,31 @@ export const MixerComponent: React.FC<MixerComponentProps> = ({ mixer }) => {
                 {/* LEFT CHANNEL - DECK A */}
                 <div className={styles.channelStrip}>
                     <div className={styles.eqSection}>
-                        <Knob label="HIGH" min={-20} max={10} value={eqA.high} onChange={(v) => handleEQ('A', 'high', v)} size={48} />
-                        <Knob label="MID" min={-20} max={10} value={eqA.mid} onChange={(v) => handleEQ('A', 'mid', v)} size={48} />
-                        <Knob label="LOW" min={-20} max={10} value={eqA.low} onChange={(v) => handleEQ('A', 'low', v)} size={48} />
+                        <Knob label="GAIN" min={0} max={100} value={100} onChange={() => { }} size={36} />
+                        <div className={styles.knobDivider}></div>
+                        <Knob label="HIGH" min={-20} max={10} value={eqA.high} onChange={(v) => handleEQ('A', 'high', v)} size={36} />
+                        <Knob label="MID" min={-20} max={10} value={eqA.mid} onChange={(v) => handleEQ('A', 'mid', v)} size={36} />
+                        <Knob label="LOW" min={-20} max={10} value={eqA.low} onChange={(v) => handleEQ('A', 'low', v)} size={36} />
+                        <div className={styles.knobDivider}></div>
+                        <Knob label="FILTER" min={-100} max={100} value={0} onChange={() => { }} size={36} />
                     </div>
-                    <label className={styles.channelLabel}>VOL A</label>
-                    <div className={styles.sliderTrack}>
-                        <input
-                            type="range"
-                            className={`${styles.volumeSlider} ${styles.sliderA}`}
-                            min="0" max="100"
-                            value={faderA}
-                            onChange={(e) => handleVolume('A', parseFloat(e.target.value))}
-                        />
+
+                    <div className={styles.faderGroup}>
+                        <div className={styles.vuMeter}>
+                            <div className={styles.vuLevel} style={{ height: `${Math.random() * 60 + 20}%` }}></div>
+                        </div>
+                        <div className={styles.faderWrapper}>
+                            <label className={styles.channelLabel}>VOL A</label>
+                            <div className={styles.sliderTrack}>
+                                <input
+                                    type="range"
+                                    className={`${styles.volumeSlider} ${styles.sliderA}`}
+                                    min="0" max="100"
+                                    value={faderA}
+                                    onChange={(e) => handleVolume('A', parseFloat(e.target.value))}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -74,9 +86,20 @@ export const MixerComponent: React.FC<MixerComponentProps> = ({ mixer }) => {
                     <div className={styles.fxPadsContainer}>
                         <SamplerComponent sampler={audioEngine.sampler} />
                     </div>
-                    <div className={styles.autoPilotCompact}>
-                        <AutoDJSect />
+
+                    <div className={styles.centerControlsRow}>
+                        <div className={styles.autoPilotCompact}>
+                            <AutoDJSect />
+                        </div>
+                        <button
+                            className={styles.saveBtn}
+                            onClick={() => mixer.downloadRecording('DJ_Mann_Session.webm')}
+                            title="Save current recorded session"
+                        >
+                            SAVE
+                        </button>
                     </div>
+
                     {/* CROSSFADER IN CENTER */}
                     <div className={styles.xfaderSection}>
                         <div className={styles.xfaderLabels}>
@@ -96,19 +119,31 @@ export const MixerComponent: React.FC<MixerComponentProps> = ({ mixer }) => {
                 {/* RIGHT CHANNEL - DECK B */}
                 <div className={styles.channelStrip}>
                     <div className={styles.eqSection}>
-                        <Knob label="HIGH" min={-20} max={10} value={eqB.high} onChange={(v) => handleEQ('B', 'high', v)} size={48} />
-                        <Knob label="MID" min={-20} max={10} value={eqB.mid} onChange={(v) => handleEQ('B', 'mid', v)} size={48} />
-                        <Knob label="LOW" min={-20} max={10} value={eqB.low} onChange={(v) => handleEQ('B', 'low', v)} size={48} />
+                        <Knob label="GAIN" min={0} max={100} value={100} onChange={() => { }} size={36} />
+                        <div className={styles.knobDivider}></div>
+                        <Knob label="HIGH" min={-20} max={10} value={eqB.high} onChange={(v) => handleEQ('B', 'high', v)} size={36} />
+                        <Knob label="MID" min={-20} max={10} value={eqB.mid} onChange={(v) => handleEQ('B', 'mid', v)} size={36} />
+                        <Knob label="LOW" min={-20} max={10} value={eqB.low} onChange={(v) => handleEQ('B', 'low', v)} size={36} />
+                        <div className={styles.knobDivider}></div>
+                        <Knob label="FILTER" min={-100} max={100} value={0} onChange={() => { }} size={36} />
                     </div>
-                    <label className={styles.channelLabel}>VOL B</label>
-                    <div className={styles.sliderTrack}>
-                        <input
-                            type="range"
-                            className={`${styles.volumeSlider} ${styles.sliderB}`}
-                            min="0" max="100"
-                            value={faderB}
-                            onChange={(e) => handleVolume('B', parseFloat(e.target.value))}
-                        />
+
+                    <div className={styles.faderGroup}>
+                        <div className={styles.faderWrapper}>
+                            <label className={styles.channelLabel}>VOL B</label>
+                            <div className={styles.sliderTrack}>
+                                <input
+                                    type="range"
+                                    className={`${styles.volumeSlider} ${styles.sliderB}`}
+                                    min="0" max="100"
+                                    value={faderB}
+                                    onChange={(e) => handleVolume('B', parseFloat(e.target.value))}
+                                />
+                            </div>
+                        </div>
+                        <div className={styles.vuMeter}>
+                            <div className={styles.vuLevel} style={{ height: `${Math.random() * 60 + 20}%` }}></div>
+                        </div>
                     </div>
                 </div>
             </div>

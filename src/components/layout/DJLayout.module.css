@@ -1,0 +1,61 @@
+.container {
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
+    width: 100vw;
+    background: linear-gradient(180deg, var(--bg-dark) 0%, #0a0a0a 100%);
+    overflow: hidden;
+    padding: var(--spacing-sm);
+    gap: var(--spacing-sm);
+    box-sizing: border-box;
+}
+
+/* LEFT COLUMN - Media Manager */
+.leftColumn {
+    flex: 3;
+    /* ~30% */
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+    min-width: 300px;
+}
+
+/* MIDDLE COLUMN - Mixer (Expanded) */
+.middleColumn {
+    flex: 3;
+    /* ~30% - Equal width to left */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+    min-width: 300px;
+    /* Ensure it doesn't get too small */
+    /* Removed max-width to fix "crushed" look */
+}
+
+/* RIGHT COLUMN - Decks */
+.rightColumn {
+    flex: 4;
+    /* ~40% - Slightly reduced to give space to mixer */
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    min-width: 0;
+}
+
+.deckWrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+    min-height: 0;
+}

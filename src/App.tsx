@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { audioEngine } from './audio/AudioEngine';
 import { DeckComponent } from './components/deck/DeckComponent';
 import { MixerComponent } from './components/mixer/MixerComponent';
-import { MainLayout } from './components/layout/MainLayout';
+import { DJLayout } from './components/layout/DJLayout';
 import { LibraryComponent } from './components/library/LibraryComponent';
 import './index.css';
 
@@ -26,9 +26,9 @@ function App() {
         color: 'var(--text-main)',
         fontFamily: 'var(--font-main)'
       }}>
-        <h1 style={{ 
-          marginBottom: 'var(--spacing-xl)', 
-          fontSize: '3.5rem', 
+        <h1 style={{
+          marginBottom: 'var(--spacing-xl)',
+          fontSize: '3.5rem',
           letterSpacing: '2px',
           fontWeight: 'var(--font-weight-black)',
           background: 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary-hover) 100%)',
@@ -67,11 +67,11 @@ function App() {
   }
 
   return (
-    <MainLayout
-      leftDeck={<DeckComponent deck={audioEngine.deckA} id="A" />}
+    <DJLayout
+      leftPanel={<LibraryComponent />}
       mixer={<MixerComponent mixer={audioEngine.mixer} />}
-      rightDeck={<DeckComponent deck={audioEngine.deckB} id="B" />}
-      bottomPanel={<LibraryComponent />}
+      rightPanelTop={<DeckComponent deck={audioEngine.deckA} id="A" />}
+      rightPanelBottom={<DeckComponent deck={audioEngine.deckB} id="B" />}
     />
   );
 }

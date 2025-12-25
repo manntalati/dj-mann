@@ -27,6 +27,9 @@ export class AutoDJ {
     // Debug
     private _lastDebugInterval: number = 0;
 
+    // Track Counting for Session Management
+    // REMOVED static counters (_totalTracksToPlay, _tracksPlayed) in favor of dynamic queue checking
+
     constructor(deckA: Deck, deckB: Deck, mixer: Mixer) {
         this.deckA = deckA;
         this.deckB = deckB;
@@ -42,7 +45,7 @@ export class AutoDJ {
     public get mixingStatus() { return this.isMixing; }
     public get activeDeckId() { return this._activeDeckId; }
 
-    public toggleAutoPilot() {
+    public async toggleAutoPilot() {
         this._isAutoPilot = !this._isAutoPilot;
         console.log(`AutoDJ: Auto-Pilot is now ${this._isAutoPilot ? 'ON' : 'OFF'}`);
 
@@ -61,6 +64,12 @@ export class AutoDJ {
                     this._lastMixInPosition = this.deckB.currentTime;
                 }
             }
+
+            // INITIALIZE TRACK COUNTER
+            // REMOVED: No longer relying on static count. We check queue dynamically.
+            console.log(`AutoDJ: Session Started. Auto-Pilot Active.`);
+
+            this.mixer.startRecording();
             this.startMonitoring();
         } else {
             this.stopMonitoring();
@@ -110,12 +119,56 @@ export class AutoDJ {
 
             // NEW: Check if we've reached any mix-out points
             const activeTrack = activeDeck.track;
+
+            // If no target track (queue empty/unloaded), check if we can load from queue now
+            if (!targetDeck.track) {
+                try {
+                    const { useStore } = await import('../store/useStore');
+                    const nextTrack = useStore.getState().popNextFromQueue();
+                    if (nextTrack) {
+                        console.log(`AutoDJ: Target deck empty, loading late arrival from queue: ${nextTrack.title}`);
+                        await targetDeck.load(nextTrack);
+                        await this.analyzeMixPoints();
+                        return; // Let next monitor loop handle mix points
+                    }
+                } catch (e) {
+                    console.warn('AutoDJ: Lazy queue check failed', e);
+                }
+
+                if (remaining < 2) { // 2 seconds before end
+                    // END OF SESSION CHECK
+                    // If queue is empty AND target deck is empty, we are done.
+                    try {
+                        const { useStore } = await import('../store/useStore');
+                        const queueLength = useStore.getState().queue.length;
+
+                        if (queueLength === 0 && !targetDeck.track) {
+                            console.log(`AutoDJ: Queue empty & Target empty. Ending Session.`);
+                            // Ensure we finish cleanly
+                            this.finishSession();
+                        } else {
+                            // If we are here, we SHOULD have another track. If monitors failed to transition, force it now.
+                            // Only warn if target IS loaded but we missed the mix point
+                            if (targetDeck.track) {
+                                console.log(`AutoDJ: Track ending. Warning: forcing transition if possible.`);
+                                if (!this.isMixing) {
+                                    this.triggerManualTransition(this._activeDeckId === 'A' ? 'B' : 'A');
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error("AutoDJ: Error checking queue state", e);
+                    }
+                }
+                return;
+            }
+
             if (isGracePeriodOver && activeTrack?.mixPoints && targetDeck.track) {
                 // Debug log every 5 seconds
                 if (Math.floor(currentTime) % 5 === 0 && currentTime % 1 < 0.5) {
-                    console.log(`[Monitor] t=${currentTime.toFixed(1)}s, ${activeTrack.mixPoints.length} mix points available`);
+                    console.log(`[Monitor] t=${currentTime.toFixed(1)}s. Monitoring for mix points...`);
                 }
-
+                // NEW: Check if we've reached any mix-out points
                 // Find the next mix-out point we haven't passed yet
                 const nextMixOut = activeTrack.mixPoints.find(mp =>
                     mp.type === 'out' &&
@@ -135,8 +188,11 @@ export class AutoDJ {
                         Math.abs(mp.score - nextMixOut.score) < 5 // Same quality transition
                     );
 
-                    if (correspondingMixIn) {
+                    if (!correspondingMixIn) {
+                        console.warn(`[Monitor] Mix-out found at ${nextMixOut.time}, but NO matching Mix-in for ${activeTrack.id} on target track!`);
+                    } else {
                         console.log(`AutoDJ: Triggering mix - OUT at ${nextMixOut.time.toFixed(1)}s, IN at ${correspondingMixIn.time.toFixed(1)}s`);
+                        this.isMixing = true;
 
                         // NEW: Use TransitionEngine with intelligent selection
                         const transitionType = this.transitionSelector.selectTransition(
@@ -161,28 +217,14 @@ export class AutoDJ {
                         await this.transitionEngine.executeTransition(params, activeDeck, targetDeck);
                         console.log(`AutoDJ: Transition promise resolved`);
 
-                        // 1. Update State
-                        this.isMixing = false;
-                        this._activeDeckId = targetDeckId;
-                        this._lastMixInPosition = params.mixInPoint || 0;
-
-                        // 2. AUTOMATIC QUEUE LOADING
-                        try {
-                            const { useStore } = await import('../store/useStore');
-                            const nextTrack = useStore.getState().popNextFromQueue();
-
-                            if (nextTrack) {
-                                console.log(`AutoDJ: Loading next track from queue: ${nextTrack.title}`);
-                                await activeDeck.load(nextTrack);
-                                await this.analyzeMixPoints();
-                            }
-                        } catch (e) {
-                            console.warn('AutoDJ: Queue loading skipped', e);
-                        }
-
-                        console.log(`AutoDJ: State updated - activeDeck=${targetDeckId}`);
+                        // Handover to unified handler
+                        await this._onTransitionComplete(targetDeckId, params.mixInPoint || 0);
                         return;
                     }
+                }
+            } else {
+                if (Math.floor(currentTime) % 5 === 0 && currentTime % 1 < 0.5) {
+                    console.log(`[Monitor] Skipping Check: GracePeriod=${isGracePeriodOver}, HasPoints=${!!activeTrack?.mixPoints}, TargetLoaded=${!!targetDeck.track}`);
                 }
             }
 
@@ -203,19 +245,8 @@ export class AutoDJ {
 
                     (async () => {
                         await this.transitionEngine.executeTransition(params, activeDeck, targetDeck);
-                        this.isMixing = false;
-                        this._activeDeckId = targetDeckId;
-                        this._lastMixInPosition = params.mixInPoint || 0;
-
-                        // Queue loading in fallback path too
-                        try {
-                            const { useStore } = await import('../store/useStore');
-                            const nextTrack = useStore.getState().popNextFromQueue();
-                            if (nextTrack) {
-                                await activeDeck.load(nextTrack);
-                                await this.analyzeMixPoints();
-                            }
-                        } catch (e) { }
+                        // Unified completion handler
+                        await this._onTransitionComplete(targetDeckId, params.mixInPoint || 0);
                     })();
                 }
             }
@@ -251,9 +282,9 @@ export class AutoDJ {
         };
 
         await this.transitionEngine.executeTransition(params, activeDeck, targetDeck);
-        this.isMixing = false;
-        this._activeDeckId = targetDeckId;
-        this._lastMixInPosition = params.mixInPoint || 0;
+
+        // Unified completion handler
+        await this._onTransitionComplete(targetDeckId, params.mixInPoint || 0);
     }
 
     /**
@@ -313,9 +344,76 @@ export class AutoDJ {
     }
 
     /**
+     * UNIFIED HANDLER: Call this after ANY transition (Main, Fallback, Manual) finishes.
+     * Handles: State update, Track Counter, Queue Loading, and Unlocking.
+     */
+    private async _onTransitionComplete(targetDeckId: 'A' | 'B', mixInPoint: number) {
+        console.log(`AutoDJ: Transition Complete. Handover to Deck ${targetDeckId}.`);
+
+        // 1. Update Monitor State
+        this._activeDeckId = targetDeckId;
+        this._lastMixInPosition = mixInPoint;
+
+        // 2. Increment Session Counter
+        // this._tracksPlayed++; // Deprecated
+        console.log(`AutoDJ: Track Finished. Handshake complete.`);
+
+        // 3. Queue Loading Logic
+        try {
+            const { useStore } = await import('../store/useStore');
+            const queueLength = useStore.getState().queue.length;
+
+            const freeDeck = this._activeDeckId === 'A' ? this.deckB : this.deckA;
+            const freeDeckId = this._activeDeckId === 'A' ? 'B' : 'A';
+
+            console.log(`AutoDJ: Transition verification - Active: ${this._activeDeckId}, Free: ${freeDeckId}`);
+
+            // Unload old track immediately
+            freeDeck.unload();
+
+            if (queueLength > 0) {
+                console.log(`AutoDJ: Queue has ${queueLength} items. Popping next...`);
+                const nextTrack = useStore.getState().popNextFromQueue();
+
+                if (nextTrack) {
+                    console.log(`AutoDJ: Loading "${nextTrack.title}" onto Free Deck (${freeDeckId})...`);
+                    await freeDeck.load(nextTrack);
+                    console.log(`AutoDJ: Load Complete. Deck ${freeDeckId} now has "${freeDeck.track?.title}"`);
+
+                    // Trigger analysis for the new pair
+                    await this.analyzeMixPoints();
+                }
+            } else {
+                console.log(`AutoDJ: Queue empty. Deck ${freeDeckId} remains awaiting next track.`);
+            }
+        } catch (e) {
+            console.error('AutoDJ: CRITICAL QUEUE ERROR', e);
+        }
+
+        // 4. FINALLY: Unlock
+        console.log(`AutoDJ: State updated - Active Deck is now ${targetDeckId}, Lock Released.`);
+        this.isMixing = false;
+    }
+
+    /**
      * Simple energy detection or time-remaining check could go here
      */
     update() {
         // Called periodically to check if we need to mix out
+    }
+
+    /**
+     * End the Auto-DJ session, stop recording, and save.
+     */
+    async finishSession() {
+        console.log('AutoDJ: Finishing session...');
+        this.toggleAutoPilot(); // Off
+
+        // Stop both decks
+        this.deckA.pause();
+        this.deckB.pause();
+
+        // Download recording
+        await this.mixer.downloadRecording('DJ_Mann_Session_Mix.webm');
     }
 }

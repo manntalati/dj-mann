@@ -9,6 +9,7 @@ export class Mixer {
     public crossfader: Tone.CrossFade;
     public master: Tone.Gain;
     public sampler: import('./SamplerEngine').SamplerEngine | null = null;
+    private recorder: Tone.Recorder;
 
     constructor() {
         this.channelA = new Tone.Channel({ volume: 0 });
@@ -23,6 +24,10 @@ export class Mixer {
 
         // Master output
         this.master = new Tone.Gain(1).toDestination();
+
+        // Recorder
+        this.recorder = new Tone.Recorder();
+        this.master.connect(this.recorder);
 
         // Route: Channel -> EQ -> Crossfader -> Master
         this.channelA.chain(this.eqA, this.crossfader.a);
@@ -61,4 +66,32 @@ export class Mixer {
         // For now, returning dummy or todo
         return [0, 0];
     }
+
+    // --- Recording ---
+
+    async startRecording() {
+        if (this.recorder.state === 'started') return;
+        console.log('Mixer: Starting session recording...');
+        await this.recorder.start();
+    }
+
+    async stopRecording(): Promise<Blob> {
+        if (this.recorder.state !== 'started') {
+            console.warn('Mixer: Recorder not started');
+            return new Blob();
+        }
+        console.log('Mixer: Stopping session recording...');
+        return await this.recorder.stop();
+    }
+
+    async downloadRecording(filename: string = 'DJ_Mann_Session.webm') {
+        const blob = await this.stopRecording();
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.download = filename;
+        anchor.href = url;
+        anchor.click();
+        console.log(`Mixer: Downloaded recording as ${filename}`);
+    }
 }
+

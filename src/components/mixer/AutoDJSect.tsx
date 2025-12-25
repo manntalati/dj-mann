@@ -20,8 +20,8 @@ export const AutoDJSect: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
-    const toggleAutoPilot = () => {
-        const newState = audioEngine.autoDJ.toggleAutoPilot();
+    const toggleAutoPilot = async () => {
+        const newState = await audioEngine.autoDJ.toggleAutoPilot();
         setIsAutoPilot(newState);
     };
 

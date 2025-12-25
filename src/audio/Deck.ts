@@ -74,6 +74,17 @@ export class Deck {
         console.log(`Deck loaded: ${track.title}`);
     }
 
+    /**
+     * Unload the current track
+     */
+    unload() {
+        if (this._isPlaying) this.pause();
+        this._track = null;
+        this._pausedAt = 0;
+        this._startedAt = 0;
+        console.log('Deck unloaded');
+    }
+
     play() {
         if (this._isPlaying || !this._track || !this.player.loaded) return;
 
