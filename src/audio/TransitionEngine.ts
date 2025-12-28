@@ -69,14 +69,9 @@ export class TransitionEngine {
         const targetDeckId = target === this.deckA ? 'A' : 'B';
         const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // 1. SCHEDULE TARGET START
         target.playAt(now, params.mixInPoint);
         target.player.volume.setValueAtTime(0, now);
 
-        // 2. GRADUAL CROSSFADE with smoother curve
-        this.mixer.crossfader.fade.cancelScheduledValues(now);
-        this.mixer.crossfader.fade.setValueAtTime(this.mixer.crossfader.fade.value, now);
-        // Use exponential curve for smoother transition
         this.mixer.crossfader.fade.exponentialRampToValueAtTime(targetX, now + duration);
 
         // 3. ENHANCED SOURCE FX AUTOMATION - smoother curves
@@ -85,13 +80,12 @@ export class TransitionEngine {
         source.delay.wet.linearRampToValueAtTime(0.5, now + duration * 0.3);
         source.delay.wet.linearRampToValueAtTime(0.8, now + duration * 0.5);
         source.delay.wet.exponentialRampToValueAtTime(0, now + duration * 0.9);
-        
+
         source.delay.feedback.setValueAtTime(0, now);
         source.delay.feedback.linearRampToValueAtTime(0.6, now + duration * 0.3);
         source.delay.feedback.linearRampToValueAtTime(0.85, now + duration * 0.5);
         source.delay.feedback.exponentialRampToValueAtTime(0, now + duration * 0.9);
 
-        // 4. SMOOTHER SOURCE FADE OUT
         source.player.volume.cancelScheduledValues(now);
         source.player.volume.setValueAtTime(source.player.volume.value, now);
         source.player.volume.linearRampToValueAtTime(-20, now + duration * 0.6);
@@ -182,7 +176,6 @@ export class TransitionEngine {
         const targetDeckId = target === this.deckA ? 'A' : 'B';
         const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // 1. START TARGET
         target.playAt(now, params.mixInPoint);
         target.player.volume.setValueAtTime(0, now);
         target.player.volume.linearRampToValueAtTime(0, now + duration * 0.7);
@@ -196,24 +189,24 @@ export class TransitionEngine {
         // 3. ENHANCED FREQUENCY SEPARATION with EQ automation
         const sourceEq = source === this.deckA ? this.mixer.eqA : this.mixer.eqB;
         const targetEq = target === this.deckA ? this.mixer.eqA : this.mixer.eqB;
-        
+
         // Source: High-pass with low-end reduction
         source.filter.type = 'highpass';
         source.filter.frequency.setValueAtTime(20, now);
         source.filter.frequency.exponentialRampToValueAtTime(800, now + duration * 0.6);
         source.filter.frequency.exponentialRampToValueAtTime(2000, now + duration * 0.7);
-        
+
         // Reduce source low-end via EQ
         sourceEq.low.setValueAtTime(0, now);
         sourceEq.low.linearRampToValueAtTime(-12, now + duration * 0.6);
         sourceEq.low.linearRampToValueAtTime(-20, now + duration * 0.7);
-        
+
         // Target: Low-pass initially, then open up
         target.filter.type = 'lowpass';
         target.filter.frequency.setValueAtTime(20000, now);
         target.filter.frequency.setValueAtTime(20000, now + duration * 0.6);
         target.filter.frequency.exponentialRampToValueAtTime(20000, now + duration * 0.7);
-        
+
         // Boost target low-end slightly
         targetEq.low.setValueAtTime(0, now);
         targetEq.low.linearRampToValueAtTime(2, now + duration * 0.7);
@@ -381,13 +374,9 @@ export class TransitionEngine {
         const targetDeckId = target === this.deckA ? 'A' : 'B';
         const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // 1. START TARGET
         target.playAt(now, params.mixInPoint);
         target.player.volume.setValueAtTime(0, now);
 
-        // 2. GRADUAL CROSSFADE
-        this.mixer.crossfader.fade.cancelScheduledValues(now);
-        this.mixer.crossfader.fade.setValueAtTime(this.mixer.crossfader.fade.value, now);
         this.mixer.crossfader.fade.linearRampToValueAtTime(targetX, now + duration);
 
         // 3. INTELLIGENT EQ AUTOMATION
@@ -446,7 +435,6 @@ export class TransitionEngine {
         const targetDeckId = target === this.deckA ? 'A' : 'B';
         const targetX = targetDeckId === 'A' ? 0 : 1;
 
-        // 1. START TARGET
         target.playAt(now, params.mixInPoint);
         target.player.volume.setValueAtTime(0, now);
 
@@ -516,7 +504,7 @@ export class TransitionEngine {
         source.reverb.wet.linearRampToValueAtTime(0.8, now + duration * 0.4);
         source.reverb.wet.linearRampToValueAtTime(0.9, now + duration * 0.7);
         source.reverb.wet.exponentialRampToValueAtTime(0, now + duration);
-        
+
         source.reverb.decay = 3.0; // Longer decay for wash effect
 
         // 4. SOURCE FADE with reverb tail
@@ -607,7 +595,7 @@ export class TransitionEngine {
         // 3. BEAT-SYNCED CROSSFADE
         this.mixer.crossfader.fade.cancelScheduledValues(now);
         this.mixer.crossfader.fade.setValueAtTime(this.mixer.crossfader.fade.value, now);
-        
+
         // Sync crossfade to beats
         const beats = Math.floor(duration / beatDuration);
         for (let i = 1; i <= beats; i++) {

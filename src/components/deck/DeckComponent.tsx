@@ -14,12 +14,10 @@ interface DeckComponentProps {
 export const DeckComponent: React.FC<DeckComponentProps> = ({ deck, id }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [track, setTrack] = useState<Track | null>(null);
-    // New state for playback progress
     const [progress, setProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const rafRef = useRef<number>(0);
 
-    // Sync track state with deck track (for mix points updates)
     useEffect(() => {
         const syncInterval = setInterval(() => {
             if (deck.track && deck.track !== track) {
@@ -29,7 +27,6 @@ export const DeckComponent: React.FC<DeckComponentProps> = ({ deck, id }) => {
         return () => clearInterval(syncInterval);
     }, [deck, track]);
 
-    // Update progress loop - runs continuously to catch Auto-DJ changes
     useEffect(() => {
         const loop = () => {
             // Sync local state with deck state
@@ -70,7 +67,6 @@ export const DeckComponent: React.FC<DeckComponentProps> = ({ deck, id }) => {
             setIsPlaying(false);
             setProgress(0);
 
-            // Trigger mix point analysis if both tracks are now loaded
             audioEngine.autoDJ.analyzeMixPoints();
         }
     };

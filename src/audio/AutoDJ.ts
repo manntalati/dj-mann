@@ -14,21 +14,20 @@ export class AutoDJ {
     private transitionDuration: number = 8; // Longer for smoother EQ mix
     private autoPilotThreshold: number = 10; // seconds remaining to trigger mix
     public isMixing: boolean = false;
-    private _isAutoPilot: boolean = false; // Renamed to _autoPilotEnabled in instruction, but keeping original name for consistency with getters/setters
+    private _isAutoPilot: boolean = false;
     private _activeDeckId: 'A' | 'B' = 'A';
-    private _monitorInterval: number | null = null; // Changed type from any to number | null
+    private _monitorInterval: number | null = null;
     private _timeRemaining: number = 0;
     private _lastMixInPosition: number = 0; // The track position (seconds) where the current mix-in occurred
 
-    // New: Advanced transition system
+
     private transitionEngine: TransitionEngine;
     private transitionSelector: TransitionSelector;
 
     // Debug
     private _lastDebugInterval: number = 0;
 
-    // Track Counting for Session Management
-    // REMOVED static counters (_totalTracksToPlay, _tracksPlayed) in favor of dynamic queue checking
+
 
     constructor(deckA: Deck, deckB: Deck, mixer: Mixer) {
         this.deckA = deckA;
@@ -66,7 +65,7 @@ export class AutoDJ {
             }
 
             // INITIALIZE TRACK COUNTER
-            // REMOVED: No longer relying on static count. We check queue dynamically.
+            // INITIALIZE TRACK COUNTER
             console.log(`AutoDJ: Session Started. Auto-Pilot Active.`);
 
             this.mixer.startRecording();
@@ -114,10 +113,10 @@ export class AutoDJ {
             const remaining = activeDeck.duration - currentTime;
             this._timeRemaining = Math.max(0, remaining);
 
-            // GRACE PERIOD: Enforce 15s minimum playback before searching for next mix-out
-            const isGracePeriodOver = playbackDuration >= 15;
+            // GRACE PERIOD: Enforce 20s minimum playback before searching for next mix-out
+            const isGracePeriodOver = playbackDuration >= 20;
 
-            // NEW: Check if we've reached any mix-out points
+            // Check if we've reached any mix-out points
             const activeTrack = activeDeck.track;
 
             // If no target track (queue empty/unloaded), check if we can load from queue now
@@ -168,13 +167,14 @@ export class AutoDJ {
                 if (Math.floor(currentTime) % 5 === 0 && currentTime % 1 < 0.5) {
                     console.log(`[Monitor] t=${currentTime.toFixed(1)}s. Monitoring for mix points...`);
                 }
-                // NEW: Check if we've reached any mix-out points
+                // Check if we've reached any mix-out points
                 // Find the next mix-out point we haven't passed yet
                 const nextMixOut = activeTrack.mixPoints.find(mp =>
                     mp.type === 'out' &&
                     mp.pairTrackId === targetDeck.track?.id &&
                     currentTime >= mp.time - 2 && // 2 second window before mix point
-                    currentTime <= mp.time + 1 // 1 second after
+                    currentTime <= mp.time + 1 && // 1 second after
+                    mp.time > 20 // Absolute floor: mix-out must be after 20 seconds
                 );
 
                 if (nextMixOut) {
@@ -194,7 +194,7 @@ export class AutoDJ {
                         console.log(`AutoDJ: Triggering mix - OUT at ${nextMixOut.time.toFixed(1)}s, IN at ${correspondingMixIn.time.toFixed(1)}s`);
                         this.isMixing = true;
 
-                        // NEW: Use TransitionEngine with intelligent selection
+                        // Use TransitionEngine with intelligent selection
                         const transitionType = this.transitionSelector.selectTransition(
                             nextMixOut,
                             activeTrack,
@@ -307,10 +307,8 @@ export class AutoDJ {
         const activeDeck = this._activeDeckId === 'A' ? this.deckA : this.deckB;
         const targetDeck = this._activeDeckId === 'A' ? this.deckB : this.deckA;
 
-        const sourceTrack = activeDeck.track;
-        const targetTrack = targetDeck.track;
-
-        console.log(`Source: ${sourceTrack?.title}, Target: ${targetTrack?.title}`);
+        let sourceTrack = activeDeck.track;
+        let targetTrack = targetDeck.track;
 
         if (!sourceTrack || !targetTrack) {
             console.log('AutoDJ: Cannot analyze - need both tracks loaded');
@@ -318,26 +316,37 @@ export class AutoDJ {
         }
 
         // Don't re-analyze if we already have mix points for this specific directional pairing
-        const existingPair = sourceTrack.mixPoints?.find(mp => mp.pairTrackId === targetTrack.id && mp.type === 'out');
-        if (existingPair) {
-            console.log('AutoDJ: Mix points already analyzed for this directional pair');
+        const existingPair = sourceTrack.mixPoints?.find(mp => mp.pairTrackId === targetTrack!.id && mp.type === 'out');
+        if (existingPair && sourceTrack.downbeats && targetTrack.downbeats) {
+            console.log('AutoDJ: Mix points & ML analysis already done for this pair');
             return;
         }
 
-        console.log(`AutoDJ: Analyzing directional mix points (${this._activeDeckId} -> ${this._activeDeckId === 'A' ? 'B' : 'A'})...`);
+        console.log(`AutoDJ: Starting ML Analysis for ${sourceTrack.title} -> ${targetTrack.title}...`);
 
         try {
-            const result = await mixPointAnalyzer.analyzeTracks(
-                { ...sourceTrack, duration: activeDeck.duration },
-                { ...targetTrack, duration: targetDeck.duration }
-            );
+            // 1. Analyze Source Audio (if needed)
+            if (!sourceTrack.downbeats && activeDeck.player.loaded) {
+                const buffer = activeDeck.player.buffer.get() as AudioBuffer;
+                sourceTrack = await mixPointAnalyzer.analyzeTrackAudio(sourceTrack, buffer);
+            }
 
-            // Update the tracks with discovered mix points
+            // 2. Analyze Target Audio (if needed)
+            if (!targetTrack.downbeats && targetDeck.player.loaded) {
+                const buffer = targetDeck.player.buffer.get() as AudioBuffer;
+                targetTrack = await mixPointAnalyzer.analyzeTrackAudio(targetTrack, buffer);
+            }
+
+            // 3. Find Mix Points using the analyzed data
+            const result = await mixPointAnalyzer.findMixPoints(sourceTrack, targetTrack);
+
+            // Update the tracks with discovered mix points AND the ML data
             activeDeck.updateTrackMixPoints(result.source.mixPoints || []);
             targetDeck.updateTrackMixPoints(result.target.mixPoints || []);
 
-            console.log(`AutoDJ: Discovered ${result.source.mixPoints?.length || 0} mix-out points for "${sourceTrack.title}"`);
-            console.log(`AutoDJ: Discovered ${result.target.mixPoints?.length || 0} mix-in points for "${targetTrack.title}"`);
+            // Also update the full track object references in the decks if possible
+
+            console.log(`AutoDJ: ML Analysis Complete. Found ${result.source.mixPoints?.length} transition points.`);
         } catch (error) {
             console.error('AutoDJ: Mix point analysis failed:', error);
         }
@@ -345,7 +354,6 @@ export class AutoDJ {
 
     /**
      * UNIFIED HANDLER: Call this after ANY transition (Main, Fallback, Manual) finishes.
-     * Handles: State update, Track Counter, Queue Loading, and Unlocking.
      */
     private async _onTransitionComplete(targetDeckId: 'A' | 'B', mixInPoint: number) {
         console.log(`AutoDJ: Transition Complete. Handover to Deck ${targetDeckId}.`);

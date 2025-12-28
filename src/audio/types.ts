@@ -8,19 +8,25 @@ export interface Track {
     file?: File;
     album?: string;
     dateAdded?: string;
-    mixPoints?: MixPoint[]; // Discovered optimal mix-in/out points
+    mixPoints?: MixPoint[];
+
+
+    key?: string;
+    scale?: string;
+    downbeats?: number[];
+    energyProfile?: number[];
 }
 
 export interface MixPoint {
-    time: number; // Position in seconds
-    type: 'in' | 'out'; // Mix in or mix out point
-    matchingTime?: number; // Corresponding time on the other track
-    score?: number; // Quality score (0-100)
-    suggestedTransition?: TransitionType; // AI-suggested transition type
-    pairTrackId?: string; // ID of the paired track this works well with
+    time: number;
+    type: 'in' | 'out';
+    matchingTime?: number;
+    score?: number;
+    suggestedTransition?: TransitionType;
+    pairTrackId?: string;
 }
 
-// Transition types for creative mixing
+
 export type TransitionType =
     | 'ECHO_OUT'
     | 'LOOP_ROLL'
@@ -36,10 +42,10 @@ export type TransitionType =
     | 'BEAT_MATCHED';
 
 export interface TransitionParams {
-    duration: number; // Total transition length in seconds
+    duration: number;
     type: TransitionType;
-    mixInPoint: number; // Time on target track
-    mixOutPoint: number; // Time on source track
+    mixInPoint: number;
+    mixOutPoint: number;
     sourceBpm: number;
     targetBpm: number;
 }

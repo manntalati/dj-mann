@@ -11,15 +11,15 @@ export class Deck {
     private _pausedAt: number = 0; // Offset in seconds within the track
     private _startedAt: number = 0; // Tone.now() when playback started (last resume)
 
-    // Loop state
+
     private _loopEnabled: boolean = false;
     private _loopStart: number = 0;
     private _loopEnd: number = 0;
 
-    // Hot cues (up to 8)
+
     private _hotCues: Map<number, number> = new Map(); // index -> time in seconds
 
-    // Audio effects for creative transitions
+
     public delay: Tone.FeedbackDelay;
     public reverb: Tone.Reverb;
     public filter: Tone.Filter;
@@ -28,7 +28,7 @@ export class Deck {
         this.player = new Tone.Player();
         this.meter = new Tone.Meter();
 
-        // Initialize effects (BYPASSED by default for clean playback)
+        // Initialize effects (bypassed by default)
         this.delay = new Tone.FeedbackDelay({
             delayTime: 0.25,
             feedback: 0,
@@ -36,10 +36,10 @@ export class Deck {
         });
         this.reverb = new Tone.Reverb({
             decay: 1.5,
-            wet: 0 // CRITICAL: Bypassed during normal playback
+            wet: 0
         });
         this.filter = new Tone.Filter({
-            frequency: 20000, // Fully open (no filtering)
+            frequency: 20000,
             type: 'lowpass',
             Q: 1
         });
@@ -49,9 +49,6 @@ export class Deck {
         this.player.chain(this.filter, this.delay, this.reverb, this.meter);
     }
 
-    /**
-     * Load a track into the deck
-     */
     async load(track: Track) {
         if (this._isPlaying) this.pause();
 
@@ -74,9 +71,6 @@ export class Deck {
         console.log(`Deck loaded: ${track.title}`);
     }
 
-    /**
-     * Unload the current track
-     */
     unload() {
         if (this._isPlaying) this.pause();
         this._track = null;
@@ -94,9 +88,6 @@ export class Deck {
         this._isPlaying = true;
     }
 
-    /**
-     * Start playback at a specific Tone.js scheduled time
-     */
     playAt(time: number, offset?: number) {
         if (!this._track || !this.player.loaded) return;
 
@@ -115,24 +106,15 @@ export class Deck {
 
         const now = Tone.now();
         this.player.stop(now);
-        // Calculate current position to resume from
         const elapsed = (now - this._startedAt) * this.player.playbackRate;
         this._pausedAt += elapsed;
 
         this._isPlaying = false;
     }
 
-    /**
-     * Stop playback at a specific Tone.js scheduled time
-     */
     stopAt(time: number) {
         if (!this._isPlaying) return;
-
         this.player.stop(time);
-
-        // We can't easily calculate the exact _pausedAt for a future stop in this way
-        // without a more complex state tracker, but for transitions this is usually 
-        // followed by a seek(0) or load().
         setTimeout(() => {
             if (Tone.now() >= time) {
                 this._isPlaying = false;
@@ -179,9 +161,6 @@ export class Deck {
         return this._track;
     }
 
-    /**
-     * Connect the deck's output to a destination node
-     */
     connect(node: Tone.InputNode) {
         this.meter.connect(node);
     }
@@ -245,11 +224,6 @@ export class Deck {
     get loopStart() { return this._loopStart; }
     get loopEnd() { return this._loopEnd; }
 
-    // === HOT CUES ===
-
-    /**
-     * Set a hot cue at current position
-     */
     setCue(index: number, time?: number) {
         const cueTime = time !== undefined ? time : this.currentTime;
         this._hotCues.set(index, cueTime);

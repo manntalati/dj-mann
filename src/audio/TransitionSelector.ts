@@ -22,13 +22,7 @@ export class TransitionSelector {
         const sourceBpm = sourceTrack.bpm || 120;
         const targetBpm = targetTrack.bpm || 120;
         const bpmDiff = Math.abs(sourceBpm - targetBpm);
-        // const bpmRatio = Math.max(sourceBpm, targetBpm) / Math.min(sourceBpm, targetBpm);
         const score = mixOutPoint.score || 50;
-        
-        // Calculate track duration ratio (for energy matching)
-        // const sourceDuration = sourceTrack.duration || 180;
-        // const targetDuration = targetTrack.duration || 180;
-        // const durationRatio = Math.max(sourceDuration, targetDuration) / Math.min(sourceDuration, targetDuration);
 
         // High quality mix point with similar BPM → Beat-matched or Smart EQ
         if (score > 80 && bpmDiff < 3) {

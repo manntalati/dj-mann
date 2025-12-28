@@ -117,8 +117,10 @@
 }
 
 .volumeSlider {
-    -webkit-appearance: slider-vertical;
-    appearance: slider-vertical;
+    appearance: none;
+    /* Reset standard appearance */
+    writing-mode: vertical-lr;
+    direction: rtl;
     width: 4px;
     height: 100%;
     background: transparent;
@@ -250,6 +252,7 @@
 
 .crossfader {
     -webkit-appearance: none;
+    appearance: none;
     width: 100%;
     height: 6px;
     background: var(--bg-dark);

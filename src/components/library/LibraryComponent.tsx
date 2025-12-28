@@ -7,13 +7,11 @@ import type { Track } from '../../audio/types';
 import { FolderOpen, Plus, ListMusic, PlayCircle, Trash2 } from 'lucide-react';
 
 export const LibraryComponent = () => {
-    // Store State
     const library = useStore((state) => state.library);
     const playlist = useStore((state) => state.playlist);
     const queue = useStore((state) => state.queue);
     const isScanning = useStore((state) => state.isScanning);
 
-    // Store Actions
     const addToPlaylist = useStore((state) => state.addToPlaylist);
     const removeFromPlaylist = useStore((state) => state.removeFromPlaylist);
     const addToQueue = useStore((state) => state.addToQueue);
@@ -26,11 +24,9 @@ export const LibraryComponent = () => {
     const loadToDeck = async (track: Track, deckId: 'A' | 'B') => {
         const deck = deckId === 'A' ? audioEngine.deckA : audioEngine.deckB;
         await deck.load(track);
-        // Trigger mix point analysis when both tracks are loaded
         audioEngine.autoDJ.analyzeMixPoints();
     };
 
-    // Helper to format duration
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
@@ -47,18 +43,15 @@ export const LibraryComponent = () => {
 
     const renderTrackRow = (track: Track, _index: number, context: 'library' | 'queue' | 'playlist') => (
         <div key={`${context}-${track.id}`} className={styles.trackRow}>
-            {/* 1. Title & Artist */}
             <div className={styles.cellTitle}>
                 <span className={styles.songTitle}>{track.title}</span>
                 <span className={styles.songArtist}>{track.artist}</span>
             </div>
 
-            {/* 2. Time */}
             <div className={styles.cellTime}>
                 {formatTime(track.duration)}
             </div>
 
-            {/* 3. Actions - Same as before */}
             <div className={styles.actions}>
                 {context === 'library' && (
                     <>
@@ -106,7 +99,6 @@ export const LibraryComponent = () => {
             </div>
 
             <div className={styles.panelsContainer}>
-                {/* 1. LIVE QUEUE */}
                 <div className={styles.panel}>
                     <div className={styles.panelHeader}>
                         <PlayCircle size={14} />
@@ -127,7 +119,6 @@ export const LibraryComponent = () => {
                     </div>
                 </div>
 
-                {/* 2. SESSION PLAYLIST */}
                 <div className={styles.panel}>
                     <div className={styles.panelHeader}>
                         <ListMusic size={14} />
@@ -148,7 +139,6 @@ export const LibraryComponent = () => {
                     </div>
                 </div>
 
-                {/* 3. LIBRARY */}
                 <div className={styles.panel}>
                     <div className={styles.panelHeader}>
                         <FolderOpen size={14} />

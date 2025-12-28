@@ -6,46 +6,43 @@ export class Mixer {
     public channelB: Tone.Channel;
     public eqA: Tone.EQ3;
     public eqB: Tone.EQ3;
+    public gainA: Tone.Gain;
+    public gainB: Tone.Gain;
     public crossfader: Tone.CrossFade;
     public master: Tone.Gain;
     public sampler: import('./SamplerEngine').SamplerEngine | null = null;
     private recorder: Tone.Recorder;
 
+    private deckA: Deck | null = null;
+    private deckB: Deck | null = null;
+
     constructor() {
         this.channelA = new Tone.Channel({ volume: 0 });
         this.channelB = new Tone.Channel({ volume: 0 });
 
-        // EQs
         this.eqA = new Tone.EQ3();
         this.eqB = new Tone.EQ3();
-
-        // Crossfader
+        this.gainA = new Tone.Gain(1);
+        this.gainB = new Tone.Gain(1);
         this.crossfader = new Tone.CrossFade(0.5);
-
-        // Master output
         this.master = new Tone.Gain(1).toDestination();
-
-        // Recorder
         this.recorder = new Tone.Recorder();
         this.master.connect(this.recorder);
 
-        // Route: Channel -> EQ -> Crossfader -> Master
-        this.channelA.chain(this.eqA, this.crossfader.a);
-        this.channelB.chain(this.eqB, this.crossfader.b);
-
+        this.channelA.chain(this.gainA, this.eqA, this.crossfader.a);
+        this.channelB.chain(this.gainB, this.eqB, this.crossfader.b);
         this.crossfader.connect(this.master);
     }
 
     bindDecks(deckA: Deck, deckB: Deck) {
-        // Decks connect to Channel input
+        this.deckA = deckA;
+        this.deckB = deckB;
         deckA.connect(this.channelA);
         deckB.connect(this.channelB);
-        console.log('Mixer: Decks bound to channels with EQ');
+        console.log('Mixer: Decks bound');
     }
 
     setCrossfader(value: number) {
-        // Value 0.0 (A) to 1.0 (B)
-        // Clamp value
         const val = Math.max(0, Math.min(1, value));
         this.crossfader.fade.value = val;
     }
@@ -55,8 +52,43 @@ export class Mixer {
         target.volume.value = db;
     }
 
+    setGain(channel: 'A' | 'B', value: number) {
+        // Value: 0 to 100
+        const gainNode = channel === 'A' ? this.gainA : this.gainB;
+        if (gainNode) {
+            // Map 0...100 to 0...2.0 (standard DJ gain allows some boost)
+            gainNode.gain.value = (value / 100) * 1.5;
+        }
+    }
+
+    setFilter(channel: 'A' | 'B', value: number) {
+        // Bipolar filter: -100 (LPF) ... 0 (None) ... +100 (HPF)
+        const deck = channel === 'A' ? this.deckA : this.deckB;
+        if (!deck) return;
+
+        if (value < -5) {
+            // Low Pass
+            deck.filter.type = 'lowpass';
+            // Linear map helper
+            const map = (v: number, inMin: number, inMax: number, outMin: number, outMax: number) =>
+                (v - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+
+            deck.filter.frequency.value = map(value, -5, -100, 20000, 200);
+        } else if (value > 5) {
+            // High Pass
+            deck.filter.type = 'highpass';
+            const map = (v: number, inMin: number, inMax: number, outMin: number, outMax: number) =>
+                (v - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+
+            deck.filter.frequency.value = map(value, 5, 100, 20, 5000);
+        } else {
+            // Effectively Bypassed
+            deck.filter.type = 'lowpass';
+            deck.filter.frequency.value = 20000;
+        }
+    }
+
     setEQ(channel: 'A' | 'B', band: 'low' | 'mid' | 'high', value: number) {
-        // Value: -Infinity to +Display (usually -20 to +10 dB is good range)
         const targetEQ = channel === 'A' ? this.eqA : this.eqB;
         targetEQ[band].value = value;
     }
@@ -67,7 +99,7 @@ export class Mixer {
         return [0, 0];
     }
 
-    // --- Recording ---
+
 
     async startRecording() {
         if (this.recorder.state === 'started') return;

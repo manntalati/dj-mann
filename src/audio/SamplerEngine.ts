@@ -5,13 +5,12 @@ export class SamplerEngine {
 
     constructor() {
         this.players = new Tone.Players({
-            'horn': 'https://tonejs.github.io/audio/berklee/gong_1.mp3', // Placeholder
-            'crash': 'https://tonejs.github.io/audio/drum-samples/CR78/cymbal.mp3',
+            'horn': 'https://tonejs.github.io/audio/berklee/gong_1.mp3',
+            'crash': 'https://tonejs.github.io/audio/drum-samples/CR78/hihat.mp3',
             'kick': 'https://tonejs.github.io/audio/drum-samples/CR78/kick.mp3',
             'snare': 'https://tonejs.github.io/audio/drum-samples/CR78/snare.mp3'
         }).toDestination();
 
-        // Boost volume a bit
         this.players.volume.value = 0;
     }
 

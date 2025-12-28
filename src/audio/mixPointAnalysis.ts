@@ -1,54 +1,141 @@
 import type { Track, MixPoint } from './types';
+import AnalysisWorker from './analysis.worker?worker'; // Vite worker import
+import type { AnalysisResult } from './analysis.worker';
 
 /**
- * Analyzes two tracks to find optimal mix points
- * Samples 10-second segments from various positions and scores them
+ * Analyzes tracks using Essentia.js Web Worker + Heuristic Scoring
  */
 export class MixPointAnalyzer {
-    private sampleDuration = 10; // seconds per segment
-    private maxSamplesPerTrack = 5; // How many segments to test per track
+    private worker: Worker;
+    private pendingRequests: Map<string, (result: AnalysisResult) => void>;
+
+    constructor() {
+        this.worker = new AnalysisWorker();
+        this.pendingRequests = new Map();
+
+        this.worker.onmessage = (e) => {
+            const { id, result, error } = e.data;
+            if (this.pendingRequests.has(id)) {
+                if (error) {
+                    console.error(`MixPointAnalyzer: Worker error for ${id}`, error);
+                    this.pendingRequests.delete(id);
+                } else {
+                    const resolve = this.pendingRequests.get(id);
+                    if (resolve) resolve(result);
+                    this.pendingRequests.delete(id);
+                }
+            }
+        };
+    }
 
     /**
-     * Analyze directional transition between two tracks (Source -> Target)
-     * Returns updated tracks with mixPoints populated
+     * Analyzes a single track's audio to extract features (BPM, Key, Grid)
      */
-    async analyzeTracks(source: Track, target: Track): Promise<{ source: Track, target: Track }> {
-        console.log(`Analyzing directional mix: "${source.title}" (OUT) → "${target.title}" (IN)...`);
+    public async analyzeTrackAudio(track: Track, buffer: AudioBuffer): Promise<Track> {
+        if (track.key && track.downbeats) {
+            return track; // Already analyzed
+        }
 
-        // Generate candidate positions for each track
-        const positionsSource = this.generateCandidatePositions(source.duration);
-        const positionsTarget = this.generateCandidatePositions(target.duration);
+        console.log(`MixPointAnalyzer: Starting full analysis for "${track.title}" (Downsampled)...`);
 
-        // Score all combinations
-        const mixPointsSource: MixPoint[] = [];
-        const mixPointsTarget: MixPoint[] = [];
+        const sampleRate = buffer.sampleRate;
+        const targetSampleRate = 11025; // 4x downsample for balance of speed/accuracy
+        const downsampleFactor = sampleRate / targetSampleRate;
 
-        for (const posSource of positionsSource) {
-            for (const posTarget of positionsTarget) {
-                const score = this.scoreTransition(source, target, posSource, posTarget);
+        const fullData = buffer.getChannelData(0);
+        const downsampledLength = Math.floor(fullData.length / downsampleFactor);
+        const downsampled = new Float32Array(downsampledLength);
 
-                // If score is good enough, save as a mix point
-                if (score > 40) {
-                    mixPointsSource.push({
-                        time: posSource,
-                        type: 'out',
-                        score,
-                        pairTrackId: target.id
-                    });
+        for (let i = 0; i < downsampledLength; i++) {
+            downsampled[i] = fullData[Math.floor(i * downsampleFactor)];
+        }
 
-                    mixPointsTarget.push({
-                        time: posTarget,
-                        type: 'in',
-                        score,
-                        pairTrackId: source.id
-                    });
+        return new Promise((resolve) => {
+            const id = `${track.id}-${Date.now()}`;
+            this.pendingRequests.set(id, (result) => {
+                const updatedTrack = {
+                    ...track,
+                    bpm: result.bpm,
+                    key: result.key,
+                    scale: result.scale,
+                    downbeats: result.downbeats,
+                    energyProfile: result.energyProfile
+                };
+                console.log(`MixPointAnalyzer: Analysis complete for "${track.title}" (BPM: ${result.bpm}, Key: ${result.key} ${result.scale})`);
+                resolve(updatedTrack);
+            });
+
+            this.worker.postMessage({
+                id,
+                audioData: downsampled,
+                sampleRate: targetSampleRate
+            });
+        });
+    }
+
+    /**
+     * Finds optimal mix points between two tracks given their analysis data
+     */
+    public async findMixPoints(source: Track, target: Track): Promise<{ source: Track, target: Track }> {
+        console.log(`MixPointAnalyzer: Finding mix points for "${source.title}" -> "${target.title}"`);
+
+        if (!source.downbeats || !target.downbeats) {
+            console.warn("MixPointAnalyzer: Missing analysis data, falling back to basic scoring.");
+            return this.heuristicFallback(source, target);
+        }
+
+        // 1. Identify Candidate Mix-Out Regions
+        const sourceCandidates = this.findStructuralCandidates(source, 'out');
+
+        // 2. Identify Candidate Mix-In Regions
+        const targetCandidates = this.findStructuralCandidates(target, 'in');
+
+        // 3. Score Combinations
+        const candidatePairings: { outPt: number, inPt: number, score: number }[] = [];
+        for (const outPt of sourceCandidates) {
+            for (const inPt of targetCandidates) {
+                const score = this.calculateTransitionScore(source, target, outPt, inPt);
+                if (score > 60) {
+                    candidatePairings.push({ outPt, inPt, score });
                 }
             }
         }
 
-        // Sort by score and keep top candidates
-        mixPointsSource.sort((a, b) => (b.score || 0) - (a.score || 0));
-        mixPointsTarget.sort((a, b) => (b.score || 0) - (a.score || 0));
+        // Sort by score DESC
+        candidatePairings.sort((a, b) => b.score - a.score);
+
+        const mixPointsSource: MixPoint[] = [];
+        const mixPointsTarget: MixPoint[] = [];
+
+        // Take top pairings, ensuring we don't have too many near-identical points
+        for (const cand of candidatePairings) {
+            if (mixPointsSource.length >= 3) break;
+
+            // Basic deduplication: don't pick points too close to ones already picked
+            const isDuplicate = mixPointsSource.some(mp => Math.abs(mp.time - cand.outPt) < 10);
+            if (isDuplicate) continue;
+
+            mixPointsSource.push({
+                time: cand.outPt,
+                type: 'out',
+                score: cand.score,
+                pairTrackId: target.id,
+                matchingTime: cand.inPt
+            });
+            mixPointsTarget.push({
+                time: cand.inPt,
+                type: 'in',
+                score: cand.score,
+                pairTrackId: source.id,
+                matchingTime: cand.outPt
+            });
+        }
+
+        // 4. Fallback if no points found
+        if (mixPointsSource.length === 0) {
+            console.warn(`MixPointAnalyzer: ML found no ideal points for ${source.title} -> ${target.title}. Falling back to heuristic.`);
+            return this.heuristicFallback(source, target);
+        }
 
         return {
             source: { ...source, mixPoints: mixPointsSource.slice(0, 3) },
@@ -56,68 +143,100 @@ export class MixPointAnalyzer {
         };
     }
 
-    /**
-     * Generate candidate positions throughout the track
-     * Avoids very beginning and very end
-     */
-    private generateCandidatePositions(duration: number): number[] {
-        const positions: number[] = [];
-        const safeMargin = 20; // seconds from start/end to avoid
-        const usableDuration = duration - (safeMargin * 2);
-
-        if (usableDuration < this.sampleDuration) {
-            // Track too short, just return middle
-            return [duration / 2];
-        }
-
-        const step = usableDuration / (this.maxSamplesPerTrack + 1);
-
-        for (let i = 1; i <= this.maxSamplesPerTrack; i++) {
-            positions.push(safeMargin + (step * i));
-        }
-
-        return positions;
+    private async heuristicFallback(source: Track, target: Track): Promise<{ source: Track, target: Track }> {
+        // Just return center points
+        const outTime = source.duration - 30;
+        const inTime = 0;
+        return {
+            source: { ...source, mixPoints: [{ time: outTime, type: 'out', pairTrackId: target.id, score: 50 }] },
+            target: { ...target, mixPoints: [{ time: inTime, type: 'in', pairTrackId: source.id, score: 50 }] }
+        };
     }
 
-    /**
-     * Score how well a transition would work
-     * Higher score = better mix point
-     * 
-     * Factors:
-     * - BPM compatibility
-     * - Energy level matching
-     * - Position in track (prefer middle sections)
-     */
-    private scoreTransition(trackA: Track, trackB: Track, posA: number, posB: number): number {
-        let score = 50; // Base score
+    private findStructuralCandidates(track: Track, type: 'in' | 'out'): number[] {
+        if (!track.downbeats || track.downbeats.length === 0) return [type === 'in' ? 0 : track.duration - 30];
 
-        // 1. BPM Compatibility (0-30 points)
-        if (trackA.bpm && trackB.bpm) {
-            const bpmDiff = Math.abs(trackA.bpm - trackB.bpm);
-            const bpmScore = Math.max(0, 30 - (bpmDiff * 2));
-            score += bpmScore;
+        const candidates: number[] = [];
+        const phraseLength = 32; // 8 bars
+
+        // Structural analysis using energy profile
+        // Look for points where energy changes significantly (start of drops/breakdowns)
+        const energyPoints: number[] = [];
+        if (track.energyProfile && track.energyProfile.length > 0) {
+            for (let i = 1; i < track.energyProfile.length - 1; i++) {
+                const prev = track.energyProfile[i - 1];
+                const curr = track.energyProfile[i];
+
+                // Significant change or local peak/trough
+                if (Math.abs(curr - prev) > 0.05) {
+                    energyPoints.push((i / track.energyProfile.length) * track.duration);
+                }
+            }
         }
 
-        // 2. Position preference (0-20 points)
-        // Prefer positions in the middle 60% of the track
-        const relPosA = posA / trackA.duration;
-        const relPosB = posB / trackB.duration;
+        for (let i = 0; i < track.downbeats.length; i += phraseLength) {
+            const time = track.downbeats[i];
 
-        const posScoreA = this.scorePosition(relPosA);
-        const posScoreB = this.scorePosition(relPosB);
-        score += (posScoreA + posScoreB) / 2;
+            // Only keep phrase boundaries that are near an energy change
+            // OR are in the preferred intro/outro regions
+            const relativePos = time / track.duration;
+            const isNearEnergyChange = energyPoints.some(ep => Math.abs(ep - time) < 4); // within 1 bar usually
 
-        return Math.min(100, score);
+            if (type === 'in') {
+                if (relativePos < 0.25 || isNearEnergyChange) candidates.push(time);
+            } else {
+                // Minimum floor: Don't allow mix-out before 20 seconds
+                if (time > 20 && (relativePos > 0.70 || isNearEnergyChange)) candidates.push(time);
+            }
+        }
+
+        // Always include start/end heuristics as safety
+        if (type === 'in' && !candidates.includes(track.downbeats[0])) candidates.push(track.downbeats[0]);
+        if (type === 'out' && candidates.length === 0) candidates.push(track.duration - 30);
+
+        return candidates;
     }
 
-    /**
-     * Score a relative position (0-1) in the track
-     * Prefer middle sections
-     */
-    private scorePosition(relPos: number): number {
-        // Peak score at 0.5 (middle), decay towards edges
-        const distFromMiddle = Math.abs(relPos - 0.5);
-        return Math.max(0, 20 - (distFromMiddle * 40));
+    private calculateTransitionScore(source: Track, target: Track, outTime: number, inTime: number): number {
+        let score = 50;
+
+        // 1. Harmonic Mixing (Camelot Wheel / Key Compatibility)
+        if (source.key && target.key) {
+            if (source.key === target.key) score += 20;
+            else if (source.key === target.key.replace('Major', 'Minor')) score += 10;
+        }
+
+        // 2. BPM Match
+        if (source.bpm && target.bpm) {
+            const diff = Math.abs(source.bpm - target.bpm);
+            if (diff < 5) score += 20;
+            else if (diff < 10) score += 10;
+        }
+
+        // 3. Phrasing & Structure Check
+        // Boost points near intro/outro
+        if (outTime > source.duration * 0.8) score += 15;
+        if (inTime < target.duration * 0.2) score += 15;
+
+        // 4. Energy Profile Match (Transition between similar energy levels)
+        if (source.energyProfile && target.energyProfile) {
+            const sourceIdx = Math.floor((outTime / source.duration) * source.energyProfile.length);
+            const targetIdx = Math.floor((inTime / target.duration) * target.energyProfile.length);
+
+            const sourceEnergy = source.energyProfile[sourceIdx] || 0;
+            const targetEnergy = target.energyProfile[targetIdx] || 0;
+
+            const energyDiff = Math.abs(sourceEnergy - targetEnergy);
+            if (energyDiff < 0.1) score += 10;
+        }
+
+        // penalty for mixing in too late or out too early
+        if (outTime < 30) score -= 30; // Absolute floor penalty for very early transitions
+        else if (outTime < source.duration * 0.3) score -= 20;
+
+        if (inTime > target.duration * 0.7) score -= 20;
+
+        return Math.max(0, Math.min(100, score));
     }
 }
 

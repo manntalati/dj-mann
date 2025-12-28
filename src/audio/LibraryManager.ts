@@ -33,8 +33,8 @@ export class LibraryManager {
 
                     tracks.push({
                         id: crypto.randomUUID(),
-                        title: file.name.replace(/\.[^/.]+$/, ""), // remove extension
-                        artist: 'Unknown', // Todo: Parse ID3
+                        title: file.name.replace(/\.[^/.]+$/, ""),
+                        artist: 'Unknown',
                         url: url,
                         duration: 0,
                         file: file

@@ -9,7 +9,6 @@ export const AutoDJSect: React.FC = () => {
     const [timeRemaining, setTimeRemaining] = useState(0);
     const [activeDeck, setActiveDeck] = useState(audioEngine.autoDJ.activeDeckId);
 
-    // Sync UI with engine state
     useEffect(() => {
         const interval = setInterval(() => {
             setIsAutoPilot(audioEngine.autoDJ.isAutoPilot);
@@ -30,7 +29,6 @@ export const AutoDJSect: React.FC = () => {
         await audioEngine.autoDJ.triggerManualTransition(direction);
     };
 
-    // Calculate progress for the timer bar (last 30 seconds)
     const mixThreshold = 30;
     const progress = Math.max(0, Math.min(100, (timeRemaining / mixThreshold) * 100));
 

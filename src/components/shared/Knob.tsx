@@ -17,7 +17,6 @@ export const Knob: React.FC<KnobProps> = ({ min, max, value, onChange, label, si
     const [startVal, setStartVal] = useState(0);
     const knobRef = useRef<HTMLDivElement>(null);
 
-    // Calculate rotation: fit value range to -135deg to +135deg
     const percentage = (value - min) / (max - min);
     const rotation = -135 + (percentage * 270);
 
@@ -26,7 +25,6 @@ export const Knob: React.FC<KnobProps> = ({ min, max, value, onChange, label, si
         setStartY(e.clientY);
         setStartVal(value);
 
-        // Prevent text selection
         document.body.style.userSelect = 'none';
         document.body.style.cursor = 'ns-resize';
     };
@@ -36,7 +34,6 @@ export const Knob: React.FC<KnobProps> = ({ min, max, value, onChange, label, si
             if (!dragging) return;
 
             const deltaY = startY - e.clientY;
-            // Sensitivity
             const range = max - min;
             const deltaVal = (deltaY / 200) * range;
 
